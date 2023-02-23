@@ -1,6 +1,6 @@
 {
   "name": "ml-log-stream",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Stream all log data in realtime from MarkLogic log files in terminal",
   "repository": "https://github.com/eurochriskelly/ml-log-stream"
 }
