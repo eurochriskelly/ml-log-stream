@@ -20,3 +20,24 @@ track what happens in the server after every script run.
 Loop in a script (e.g. bash/python) with the v1/eval endpoint to
 follow the latest log info. Run with USAGE=1 to see the available
 flags and options.
+
+
+### Log in example
+
+To log into a stored environment "local", simply type
+
+`ml login --environment local`
+
+This will switch to the selected environment and may request a
+password if it's unknown.
+
+To log into a stored environment, type:
+
+`ml login`
+
+This will display a list of stored environments and attempt to connect
+to that environment.
+
+
+
+
