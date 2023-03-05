@@ -1,0 +1,1 @@
+#!/usr/bin/env -S deno run --allow-env --allow-run
