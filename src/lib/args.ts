@@ -91,20 +91,24 @@ const parseArgs = (
   //     arg2: value2,
   //   }
   // }
+
+  const switches = pairs
+    .filter(x => {
+      const [k, v] = x
+      const name = `${k}`.substring(2)
+      return allowed.length ? allowed.includes(name) : true
+    })
+    .reduce((p: any, n) => {
+      const [k, v] = n
+      const name = `${k}`.substring(2)
+      p[name] = v
+      return p
+    }, {})
+
   return {
     command,
-    switches: pairs
-      .filter(x => {
-        const [k, v] = x
-        const name = `${k}`.substring(2)
-        return allowed.length ? allowed.includes(name) : true
-      })
-      .reduce((p: any, n) => {
-        const [k, v] = n
-        const name = `${k}`.substring(2)
-        p[name] = v
-        return p
-      }, {}),
+    switches,
+    length: Object.keys(switches).length,
     errors: [
       cmdErr, ...pairs
         .map(p => {
