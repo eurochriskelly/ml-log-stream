@@ -95,8 +95,10 @@ createSqliteDb() {
     sqlite3 "$DATABASE_FILE" "$TABLE_SCHEMA"
 
     # Import SQL file into SQLite database
+    local startTime=$(date +%s)
+    echo "Starting import process. Please be patient."
     sqlite3 "$DATABASE_FILE" < "$SQL_FILE"
-    echo "Import completed."
+    echo "Import completed. Took $(($(date +%s)-startTime)) seconds."
 }
 
 main "$@"
