@@ -19,6 +19,7 @@ class LogParser {
         this.logLines = readFileSync(filename).toString()
             .split('\n')
             .map((line, index) => ({ line, lineNr: index }))
+            //.slice(0, 10)
     }
     processLog() {
         const { mode } = this
@@ -73,15 +74,15 @@ class LogParser {
             host: this.host,
             port: this.port,
             type: this.mode,
-            source: '',
-            user: '',
-            method: '',
-            url: '',
-            protocol: '',
-            statusCode: '',
-            response: '',
-            message: '',
-            ...f,
+            timestamp: f.timestamp || 'l',
+            source: f.source || 'k',
+            user: f.user || 'j',
+            method: f.method || 'i',
+            url: f.url || 'h',
+            protocol: f.protocol || 'g',
+            statusCode: f.statusCode || 'f',
+            response: f.response || 'e',
+            message: f.message || 'd',
         }
     }
     exportToSql() {
@@ -94,7 +95,13 @@ class LogParser {
               }
               return value;
             }).join(', ');
-            console.log(`INSERT OR IGNORE INTO yourTableName (id, lineNr, host, port, logfiledate, date, line, type, source, user, method, url, protocol, statusCode, response, message) VALUES (${values});`)
+            console.log([
+                'INSERT OR IGNORE INTO marklogic_logs (',
+                '    id, lineNr, date, host, port, type, ', 
+                '    timestamp, source, user, method, url, ',
+                '    protocol, statusCode, response, message ',
+                `) VALUES (${values});`,
+            ].join(''));
           });
     }
 }

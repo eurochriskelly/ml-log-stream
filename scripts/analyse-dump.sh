@@ -1,38 +1,102 @@
 #!/bin/bash
 
-#now=$(date +"%-%m%dT%H%M%S")
-mkdir /tmp/log-analysis
-clear
+set -e
 
-here=$(pwd)
+main () {
+    init "$@"
+    # extractDump
+    prepareImport "$1"
+    read -p "Press enter to create databse and continue ..."
+    createSqliteDb
+}
 
-if [ -z "$1" ]; then
-    echo "Please provide the path to the dump file."
-    exit 1
-fi
-
-if [ -f "/tmp/log-analysis/log.zip" ]; then
-    echo "Log.zip already exists. Press y to overwrite, n to cancel."
-    read answer
-    if [ "$answer" != "y" ]; then
-        exit 0
+init() {
+    DATABASE_FILE="marklogic_logs.db"
+    SQL_FILE="big_import.sql"
+    LOG_DIR="/tmp/log-analysis"
+    HERE=$(pwd)
+    test -d $LOG_DIR || mkdir $LOG_DIR
+    test -f $SQL_FILE && rm $SQL_FILE
+    touch $SQL_FILE
+    test -f $LOG_DIR/$DATABASE_FILE && rm $LOG_DIR/$DATABASE_FILE
+    clear
+    # Check sqlite is installed on mac
+    if [ -z "$(which sqlite3)" ]; then
+        echo "Please install sqlite3 with brew install sqlite3"
+        exit 1
     fi
-fi
 
-# mv $1 /tmp/log-analysis/log.zip
-cd /tmp/log-analysis
-echo "Contents of /tmp/log-analysis:"
+    # nodejs is available
+    if [ -z "$(which node)" ]; then
+        echo "Please install nodejs with brew install node"
+        exit 1
+    fi
+    cd $LOG_DIR
+}
 
-echo "Unzipping log.zip"
-test -f big_import.sql && rm big_import.sql
-touch big_import.sql
+# Extract the log.zip file to $LOG_DIR
+extractDump() {
+    if [ -z "$1" ]; then
+        echo "Please provide the path to the dump file."
+        exit 1
+    fi
 
-# unzip -q log.zip
-for log in $(find logs -name "*.txt");do
-    echo "Processing $log ..."
-    node ${here}/../src/log2import.js $log >> big_import.sql
-done
+    if [ -f "${LOG_DIR}/log.zip" ]; then
+        echo "Log.zip already exists. Press y to overwrite, n to cancel."
+        read answer
+        if [ "$answer" != "y" ]; then
+            exit 0
+        fi
+    fi
 
-ls -alh big_import.sql
-echo "Rows to import: $(wc -l big_import.sql)"
+    mv $1 "${LOG_DIR}/log.zip"
+    echo "Contents of ${LOG_DIR}:"
 
+    echo "Unzipping log.zip"
+    test -f $SQL_FILE && rm $SQL_FILE
+    touch $SQL_FILE
+
+    unzip -q log.zip
+}
+
+prepareImport() {
+    echo "Preparing import from folder [$(pwd)] ..."
+    for log in $(find logs -name "*.txt");do
+        echo "Processing $log ..."
+        node ${HERE}/../src/log2import.js $log >> $SQL_FILE
+    done
+
+    ls -alh $SQL_FILE
+    echo "Rows to import: $(wc -l $SQL_FILE)"
+}
+
+createSqliteDb() {
+    echo "Creating sqlite db"
+    # Create table schema
+    TABLE_SCHEMA="CREATE TABLE IF NOT EXISTS marklogic_logs (
+        id TEXT PRIMARY KEY,
+        lineNr INTEGER,
+        date TEXT,
+        host TEXT,
+        port TEXT,
+        type TEXT,
+        timestamp TEXT,
+        source TEXT,
+        user TEXT,
+        method TEXT,
+        url TEXT,
+        protocol TEXT,
+        statusCode TEXT,
+        response TEXT,
+        message TEXT
+    );"
+
+    # Create database and table if not exists
+    sqlite3 "$DATABASE_FILE" "$TABLE_SCHEMA"
+
+    # Import SQL file into SQLite database
+    sqlite3 "$DATABASE_FILE" < "$SQL_FILE"
+    echo "Import completed."
+}
+
+main "$@"
