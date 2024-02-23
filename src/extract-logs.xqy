@@ -2,9 +2,11 @@ xquery version "1.0-ml";
 (:~
  : This query should be run from the MarkLogic query console.
  :)
-declare variable $TYPE := 'ErrorLog';
+
 declare variable $DRY_RUN := true();
-declare variable $PORT_LIST := ();
+declare variable $LOG_TYPE := 1;
+declare variable $TYPE := ('ErrorLog', '_1', 'AccessLog')[$LOG_TYPE];
+declare variable $PORT_LIST := (); (: e.g. ('8010', '8000') :)
 declare variable $HOST_LIST := ();
 declare variable $LOG_PATH := '/var/opt/MarkLogic/Logs';
 
@@ -38,6 +40,9 @@ if (xdmp:database-name(xdmp:database()) ne 'Documents') then ("", "Please change
   return
     if ($DRY_RUN)
     then (
+      "================== DRY RUN MODE =================",
+      "   Please change $DRY_RUN to false to proceed",
+      "================================================="
       "Download " || count($entries) || " files.",
       "Total size uncompressed: " || $rawSize || ".",
       $entries
