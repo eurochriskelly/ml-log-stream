@@ -505,15 +505,3 @@ Example usage:
 
 
 
-INSERT OR IGNORE INTO marklogic_logs (    
-  id, lineNr, date, 
-  host, port, type,     
-  timestamp, source, user, 
-  method, url,     protocol, 
-  statusCode, response, message ) VALUES (
-    '2-cds2.cup.overheid.nl-8002-20230205', 2, '20230205', 
-    'cds2.cup.overheid.nl', '8002', 'access', 
-    'l', 'k', 'j', 
-    'i', 'h', 'g', 
-    'f', 'e', 'd'
-  );
