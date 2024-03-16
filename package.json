@@ -1,0 +1,12 @@
+{
+  "name": "ml-log-stream",
+  "version": "1.0.0",
+  "description": "Stream logs from MarkLogic.",
+  "main": "index.js",
+  "scripts": {
+    "jsonify-logs": "bash ./scripts/jsonify-logs.sh"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

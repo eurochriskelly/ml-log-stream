@@ -72,12 +72,10 @@ if (xdmp:database-name(xdmp:database()) ne 'Documents') then ("", "Please change
 				<parts xmlns="xdmp:zip">{
 					for $e in $entries
 					let $date-part := $e/*:date/fn:string()
-					let $filename-part := replace($e/*:pathname/xs:string(.), '_\d+(\.txt)$', '$1')
 					return <part>{
 						$e/*:host/xs:string(.)
 						|| '/' || $date-part
 						|| '/' || $e/*:filename/xs:string(.)
-						|| '/' || $filename-part
 					}</part>
 				}</parts>,
 				$entries ! text { xdmp:filesystem-file(./path/xs:string(.)) }
