@@ -4,7 +4,8 @@
   "description": "Stream logs from MarkLogic.",
   "main": "index.js",
   "scripts": {
-    "jsonify-logs": "bash ./scripts/jsonify-logs.sh"
+    "logs:jsonify": "bash ./scripts/jsonify-logs.sh",
+    "logs:stream": "bash ./src/commands/streamTest.sh"
   },
   "keywords": [],
   "author": "",

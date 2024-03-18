@@ -1,11 +1,11 @@
 /*
  * LOG STREAMER for MarkLogic
- *
+ * -
  * AUTHOR: Chris Kelly, MarkLogic Corporation
  * VERSION: 0.1
  */
 
-const OPTION = 3
+const OPTION = 2
 
 // Store different usage tests in the main function below
 const SIMPLE = 1, FOLLOW = 2, RECENT_MESSAGES = 3
@@ -22,6 +22,7 @@ switch (OPTION) {
     break
 
   case FOLLOW: findInLogs()
+    .servers([8040, 8041])
     .follow()
     .process()
     .map( x => x.line )
@@ -144,7 +145,6 @@ function findInLogs() {
       }
 
       const result = logStreamer({ ...DEFAULTS })
-      return result
       /*
         .filter(result => {
           let removals = _filter
@@ -159,7 +159,7 @@ function findInLogs() {
         })
         */
         .sort(fieldSorter(_sortBy))
-        .map((line = {}) => {
+        .map((ln = {}) => {
           if (_type === 'access') {
             switch (_format) {
               case 'csv':
@@ -168,10 +168,10 @@ function findInLogs() {
               case 'txt':
                 return `${line.date} ${line.user} ${line.source} ${line.rest}`
               default:
-                return line
+                return ln
             }
           } else {
-            const { date, line, host, path } = line 
+            const { date, line, host, path } = ln 
             const logfile = path.split('/').pop()
             switch (_format) {
               case 'csv':
@@ -180,17 +180,17 @@ function findInLogs() {
               case 'txt':
                 return `${date} ${host} ${logfile} ${line}`
               default:
-                return line
+                return ln 
             }
           }
         })
+      return result
       return [
         "DESCRIPTION: " + _description,
         "SORT BY: " + _sortBy,
         "FILTER: " + _filter,
         "HOSTS: " + _hosts,
         "LOG PATH: " + _logPath,
-        "OUTPUT: " + _output,
         result,
       ].join('\n')
 
@@ -219,7 +219,7 @@ function logStreamer(args) {
   const {
     VERSION = '0.0.1',
     FORMAT, FILTER, FLAGS, TYPE = 'error',
-    USAGE, VERBOSE,
+    USAGE, VERBOSE = 'false',
     SERVERS = [],
     LOG_PATH, FOLLOW
   } = args
@@ -399,7 +399,6 @@ function logStreamer(args) {
 
       // Output the log lines
       output(format = 'csv') {
-        console.log('format', format)
         switch (format) {
           case 'csv':
             return this.logData
