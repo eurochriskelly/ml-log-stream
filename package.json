@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "logs:jsonify": "bash ./scripts/jsonify-logs.sh",
-    "logs:stream": "bash ./src/commands/streamTest.sh"
+    "logs:stream": "bash ./src/commands/streamTest.sh",
+    "logs:ingest": "cd scripts;bash ingest-logs.sh"
   },
   "keywords": [],
   "author": "",

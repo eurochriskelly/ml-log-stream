@@ -29,8 +29,7 @@ over and over again.
   - Download the logfile dump archive
 
 - Import the log dump into a local db for analysis
-  - `cd scripts/`
-  - `bash ingest-logs.sh path/to/log_2024xxxx.zip`
+  - `npm run ingest:logs -- path/to/log_2024xxxx.zip`
   - wait for import to complete (it's currently using sqlite so be patient)
 	
 - To analyse, the logs do as follows:
