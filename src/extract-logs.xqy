@@ -7,7 +7,7 @@ xquery version "1.0-ml";
 declare variable $DRY_RUN := true();
 
 declare variable $DAYS := (0,1,3);
-declare variable $TYPE := ( 'ErrorLog', 'AccessLog', '')[1];
+declare variable $TYPES := ( 'ErrorLog', 'AccessLog', 'Request')[1];
 declare variable $PORT_LIST := (); (: e.g. ('8010', '8000') :)
 declare variable $HOST_LIST := ();
 declare variable $LOG_PATH := '/var/opt/MarkLogic/Logs';
@@ -18,11 +18,12 @@ if (xdmp:database-name(xdmp:database()) ne 'Documents') then ("", "Please change
 	let $entries :=
 		for $days-ago in $DAYS
 		let $entries := (
+      for $type in $TYPES
 			for $host in xdmp:hosts()
 			for $entry in xdmp:filesystem-directory($LOG_PATH)//*:entry
 			let $fn := $entry//*:filename/xs:string(.)
 			where ends-with($fn,
-				$TYPE ||
+				$type ||
 				xs:string(if ($days-ago eq 0) then '' else ('_' || $days-ago)) ||
 				'.txt')
 				(: only give requested ports :)
