@@ -28,7 +28,7 @@ if (!logFilePath || !outputFilePath) {
 function jsonToCsvLine(logEntry) {
   return [
     logEntry.timestamp,
-    new Date(logEntry.timestamp).toISOString().split('T')[0], // date
+    logEntry.date,
     logEntry.host,
     logEntry.port,
     logEntry.type,
@@ -81,7 +81,7 @@ readFileStream.on('end', () => {
     }
   }
   writeFileStream.end(); // Close the write stream
-  console.log('Finished processing log file.');
+  console.log(`Finished processing log file [${logFilePath}].`);
 });
 
 readFileStream.on('error', (err) => {
