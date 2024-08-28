@@ -11,7 +11,7 @@ set -e
 echo "ml-log-analyse"
 export LIB_DIR="@@REPO_DIR@@"
 
-select option in "logs to json" "ingest logs"; do
+select option in "logs to json" "monster log" "ingest logs" "clean up"; do
   case $option in
   "logs to json")
     echo "Converting logs to json..."
@@ -26,6 +26,11 @@ select option in "logs to json" "ingest logs"; do
   "ingest logs")
     echo "Ingesting logs..."
     bash $LIB_DIR/scripts/ingest-logs.sh
+    break
+    ;;
+  "clean up")
+    echo "Clean up"
+    bash $LIB_DIR/scripts/clean-up.sh
     break
     ;;
   *)
