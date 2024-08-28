@@ -8,6 +8,7 @@
  */
 
 const { LogParser } = require("./lib/log-parser");
+
 let logType = "access";
 process.argv.forEach((val, index, lst ) => {
   if (val == '--type') logType=lst[index + 1] 
@@ -17,5 +18,8 @@ const logFile = process.argv.pop();
 // Use the LogParser class to parse the log file
 const logParser = new LogParser(logFile);
 logParser.processLog(logFile);
-logParser.exportToJson(logFile.replace('.txt.tmp', '.json'));
+console.log(`Exporting from ${logFile} to ${logFile.replace('.txt.tmp', '.json')}`);
+
+const ext = logType === 'access' ? '.txt' : '.txt.tmp'
+logParser.exportToJson(logFile.replace(ext, '.json'));
 
