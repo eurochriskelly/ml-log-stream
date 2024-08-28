@@ -8,8 +8,7 @@
  */
 
 const { LogParser } = require("./lib/log-parser");
-
-let logType = 'error'
+let logType = "access";
 process.argv.forEach((val, index, lst ) => {
   if (val == '--type') logType=lst[index + 1] 
 });
