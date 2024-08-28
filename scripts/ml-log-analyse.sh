@@ -11,19 +11,21 @@ set -e
 echo "ml-log-analyse"
 export LIB_DIR="@@REPO_DIR@@"
 
-select option in "logs to json" "stream logs" "ingest logs"; do
+select option in "logs to json" "ingest logs"; do
   case $option in
   "logs to json")
     echo "Converting logs to json..."
     bash $LIB_DIR/scripts/jsonify-logs.sh
     break
     ;;
-  "stream logs")
-    echo "Streaming logs..."
+  "monster log")
+    echo "Make a monster log..."
+    bash $LIB_DIR/scripts/monster-log.sh
     break
     ;;
   "ingest logs")
     echo "Ingesting logs..."
+    bash $LIB_DIR/scripts/ingest-logs.sh
     break
     ;;
   *)
@@ -31,3 +33,4 @@ select option in "logs to json" "stream logs" "ingest logs"; do
     ;;
   esac
 done
+
