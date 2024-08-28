@@ -6,7 +6,7 @@
   "scripts": {
     "logs:jsonify": "bash ./scripts/jsonify-logs.sh",
     "logs:stream": "bash ./src/commands/streamTest.sh",
-    "logs:ingest": "cd scripts;bash ingest-logs.sh"
+    "logs:ingest": "bash ./scripts/ingest-logs.sh"
   },
   "keywords": [],
   "author": "",
