@@ -1,4 +1,4 @@
-const { readFileSync, writeFileSync } = require("fs");
+const { readFileSync, appendFileSync, writeFileSync } = require("fs");
 
 class LogParser {
   constructor(filename) {
@@ -108,11 +108,39 @@ class LogParser {
   }
   exportToJson(fname) {
     console.log(`Writing to ${fname}`);
-    writeFileSync(fname, this.logData.map((x) => JSON.stringify(x)).join("\n"));
+    try {
+      console.log('ld len', this.logData.length);
+
+      // Define chunk size
+      const CHUNK_SIZE = 100000;
+      const totalChunks = Math.ceil(this.logData.length / CHUNK_SIZE);
+
+      for (let i = 0; i < totalChunks; i++) {
+        const start = i * CHUNK_SIZE;
+        const end = start + CHUNK_SIZE;
+        const chunkData = this.logData.slice(start, end).map((x) => JSON.stringify(x)).join("\n");
+
+        console.log(`Writing chunk ${i + 1} of ${totalChunks}, size: ${chunkData.length} bytes`);
+
+        // Append the chunk to the file
+        if (i === 0) {
+          // For the first chunk, use writeFileSync to create the file
+          writeFileSync(fname, chunkData);
+        } else {
+          // For subsequent chunks, use appendFileSync to add to the file
+          appendFileSync(fname, chunkData);
+        }
+      }
+    } catch (e) {
+      console.error(`Error writing to ${fname}: ${e}`);
+      process.exit(1);
+    }
   }
   exportToCsv(fname) {
     console.log(`Writing to ${fname}`);
-    writeFileSync(fname, this.logData.map((x) => JSON.stringify(x)).join("\n"));
+    const data = this.logData.map((x) => JSON.stringify(x)).join("\n");
+    console.log(`The data size is ${data.length} bytes`)
+    writeFileSync(fname, data);
   }
 }
 

@@ -22,20 +22,17 @@ processLogFiles() {
   do
     # If the name includes "Error", pass the flag --type error
     if [[ $file == *"Error"* ]]; then
-      II "--"
       II "Processing ErrorLog $file"
       node --max-old-space-size=8192 ${LIB_DIR}/src/logFlattenErrorStacks.js --log-file $file --log-file-flat ${file}.tmp
       node --max-old-space-size=8192 ${LIB_DIR}/src/log2json.js --type error ${file}.tmp
       rm ${file}.tmp
     # If the name includes "Access", pass the flag --type access
     elif [[ $file == *"Access"* ]]; then
-      II "--"
       II "Processing AccessLog $file"
       node --max-old-space-size=8192 ${LIB_DIR}/src/log2json.js --type access ${file}
     else
       II "ERROR: File $file does not match any type .. tbd"
     fi
-    echo "++"
   done
 }
 

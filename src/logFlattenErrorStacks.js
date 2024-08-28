@@ -1,5 +1,4 @@
 const fs = require('fs');
-const path = require('path');
 
 // assign variable following --log-file to logFilePath
 const logFilePath = process.argv[process.argv.indexOf('--log-file') + 1];
@@ -31,7 +30,6 @@ readFileStream.on('end', function() {
     }
     fs.writeFile(logFileFlatPath, newContent, (err) => {
         if (err) throw err;
-        console.log(`File has been saved as ${logFileFlatPath}`);
     });
 });
 
