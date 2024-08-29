@@ -65,6 +65,9 @@ readFileStream.on('data', (chunk) => {
       writeFileStream.write(csvLine + '\n'); // Write to output file
     } catch (e) {
       console.error(`Error parsing JSON:`, e);
+      console.log('---')
+      console.log(line)
+      console.log('---')
     }
   });
 });

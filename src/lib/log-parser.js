@@ -107,10 +107,7 @@ class LogParser {
     });
   }
   exportToJson(fname) {
-    console.log(`Writing to ${fname}`);
     try {
-      console.log('ld len', this.logData.length);
-
       // Define chunk size
       const CHUNK_SIZE = 100000;
       const totalChunks = Math.ceil(this.logData.length / CHUNK_SIZE);
@@ -128,9 +125,10 @@ class LogParser {
           writeFileSync(fname, chunkData);
         } else {
           // For subsequent chunks, use appendFileSync to add to the file
-          appendFileSync(fname, chunkData);
+          appendFileSync(fname, '\n' + chunkData);
         }
       }
+      console.log(`Written to ${fname}`);
     } catch (e) {
       console.error(`Error writing to ${fname}: ${e}`);
       process.exit(1);
