@@ -43,7 +43,7 @@ if $interactive; then
       ;;
     "ingest logs")
       echo "Ingesting logs..."
-      bash $LIB_DIR/scripts/ingest-logs.sh
+      bash $LIB_DIR/scripts/import-csv-to-sqlite.sh
       break
       ;;
     "clean up")
@@ -58,7 +58,7 @@ if $interactive; then
   done
 else
   start=$(date +%s)
-  II "Cleaning up"
+  II "Cleaning up previous data"
   bash $LIB_DIR/scripts/clean-up.sh
   II "Preparing logs as json"
   bash $LIB_DIR/scripts/jsonify-logs.sh

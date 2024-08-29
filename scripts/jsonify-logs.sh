@@ -36,6 +36,6 @@ processLogFiles() {
   done
 }
 
-#processLogFiles "Error"
+processLogFiles "Error"
 processLogFiles "Access"
 # processLogFiles "Request"
