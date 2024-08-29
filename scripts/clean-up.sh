@@ -11,7 +11,6 @@ fi
 
 zip=$(find . -name "logs_*.zip" -maxdepth 1)
  
-clear
 if [ -n "$zip" ]; then
   # The easy and error free way
   echo "Removing and re-extracting log files from source zip.."
@@ -33,7 +32,6 @@ else
     -o -name "*ErrorLog*.json" \
     -o -name "*RequestLog*.json" \) -exec rm {} \;
 fi
-
 
 echo "Clearing monster log files ..."
 find "${DIR}" -type f -name "monster-log*" -exec rm {} \;
