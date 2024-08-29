@@ -29,15 +29,15 @@ while [ "$#" -gt 0 ]; do
 done
 
 if $interactive; then
-  select option in "logs to json" "monster log" "ingest logs" "clean up"; do
+  select option in "clean up" "logs to json" "flatten logs" "ingest logs"; do
     case $option in
     "logs to json")
       echo "Converting logs to json..."
       bash $LIB_DIR/scripts/jsonify-logs.sh
       break
       ;;
-    "monster log")
-      echo "Make a monster log..."
+    "flatten logs")
+      echo "Flatten log files"
       bash $LIB_DIR/scripts/monster-log.sh
       break
       ;;
