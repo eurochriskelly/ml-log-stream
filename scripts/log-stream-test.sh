@@ -1,7 +1,6 @@
 #!/bin/bash
 
 cd src
-clear
 echo "Executing streamer for env $ML_ENV"
 
 source ~/.mlshrc

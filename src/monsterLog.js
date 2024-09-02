@@ -7,12 +7,17 @@
 */
 const fs = require('fs');
 
+const DELIMITER = '|';
+
 // Command-line arguments handling
-let logFilePath, outputFilePath;
+let logFilePath, outputFilePath, logType;
 argv = process.argv;
 argv.forEach((arg, index, lst) => {
   if (arg === '--log-file') {
     logFilePath = lst[index + 1];
+  }
+  if (arg === '--type') {
+    logType = lst[index + 1];
   }
   if (arg === '--output') {
     outputFilePath = lst[index + 1];
@@ -25,24 +30,48 @@ if (!logFilePath || !outputFilePath) {
 }
 
 // Function to convert JSON object to CSV format
-function jsonToCsvLine(logEntry) {
-  return [
-    logEntry.timestamp,
-    logEntry.date,
-    logEntry.host,
-    logEntry.port,
-    logEntry.type,
-    logEntry.lineNr, // Use lineNr from JSON
-    logEntry.id,
-    logEntry.source,
-    logEntry.user,
-    logEntry.method,
-    logEntry.url,
-    logEntry.protocol,
-    logEntry.statusCode,
-    logEntry.response,
-    JSON.stringify(logEntry.message) // Handle cases where the message is an object
-  ].join(',');
+function jsonToCsvLine(logEntry, type) {
+  if (type === 'request') {
+    let uriNoParams = logEntry.url.split('?').shift();
+    let urlParts = [ ...uriNoParams.split('/'), '', ''];
+    return [
+      logEntry.time,
+      logEntry.url,
+      urlParts[1],
+      urlParts[2],
+      logEntry.user,
+      logEntry.elapsedTime,
+      logEntry.requests,
+      logEntry.listCacheHits,
+      logEntry.inMemoryListHits,
+      logEntry.expandedTreeCacheHits,
+      logEntry.valueCacheHits,
+      logEntry.valueCacheMisses,
+      logEntry.regexpCacheHits,
+      logEntry.regexpCacheMisses,
+      logEntry.fsProgramCacheHits,
+      logEntry.dbProgramCacheHits,
+      logEntry.runTime,
+    ].join(DELIMITER)
+  } else {
+    return [
+      logEntry.timestamp,
+      logEntry.date,
+      logEntry.host,
+      logEntry.port,
+      logEntry.type,
+      logEntry.lineNr, // Use lineNr from JSON
+      logEntry.id,
+      logEntry.source,
+      logEntry.user,
+      logEntry.method,
+      logEntry.url,
+      logEntry.protocol,
+      logEntry.statusCode,
+      logEntry.response,
+      JSON.stringify(logEntry.message.replace(/\|/g, '/')) // Handle cases where the message is an object
+    ].join(DELIMITER);
+  }
 }
 
 // Create a write stream to the output file (without header)
@@ -61,7 +90,7 @@ readFileStream.on('data', (chunk) => {
   lines.forEach((line) => {
     try {
       const logEntry = JSON.parse(line); // Parse JSON
-      const csvLine = jsonToCsvLine(logEntry); // Convert to CSV format
+      const csvLine = jsonToCsvLine(logEntry, logType); // Convert to CSV format
       writeFileStream.write(csvLine + '\n'); // Write to output file
     } catch (e) {
       console.error(`Error parsing JSON:`, e);
@@ -77,7 +106,7 @@ readFileStream.on('end', () => {
   if (buffer.length > 0) {
     try {
       const logEntry = JSON.parse(buffer);
-      const csvLine = jsonToCsvLine(logEntry);
+      const csvLine = jsonToCsvLine(logEntry, logType);
       writeFileStream.write(csvLine + '\n');
     } catch (e) {
       console.error(`Error parsing JSON on last line:`, e);
