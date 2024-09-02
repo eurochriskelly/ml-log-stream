@@ -29,7 +29,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 if $interactive; then
-  select option in "clean up" "logs to json" "flatten logs" "ingest logs"; do
+  select option in "clean up" "logs to json" "flatten logs" "ingest logs" "group urls"; do
     case $option in
     "logs to json")
       echo "Converting logs to json..."
@@ -49,6 +49,11 @@ if $interactive; then
     "clean up")
       echo "Clean up"
       bash $LIB_DIR/scripts/clean-up.sh
+      break
+      ;;
+    "group urls")
+      echo "Grouping urls"
+      bash $LIB_DIR/scripts/group-urls.sh
       break
       ;;
     *)
