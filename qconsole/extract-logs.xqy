@@ -69,28 +69,35 @@ if (xdmp:database-name(xdmp:database()) ne 'Documents') then ("", "Please change
       let $timestamp := fn:substring(fn:replace(xs:string(fn:current-dateTime()), '[^0-9]', ''), 1, 15)
       let $name := fn:string-join($timestamp, '_') || '.zip'
       let $dlUri := "/export/" || xdmp:get-current-user() || "/logs_" || $name
-      let $contents := xdmp:zip-create(
-        <parts xmlns="xdmp:zip">{
-          for $e in $entries
-          let $date-part := $e/*:date/fn:string()
-          return <part>{
-            $e/*:host/xs:string(.)
-            || '/' || $date-part
-            || '/' || $e/*:filename/xs:string(.)
-          }</part>
-        }</parts>,
-        $entries ! text { xdmp:filesystem-file(./path/xs:string(.)) }
-      )
-      let $_ := xdmp:document-insert($dlUri, $contents)
-      return (
-          "Export complete!",
-          "",
-          "Click explore and click on document: " || $dlUri || " to download.",
-          "",
-          "To upload locally, 'cd' to your browser 'Downloads' directory and try:",
-          "",
-          "  curl --digest --user admin:admin -X PUT --data-binary " || "@$(ls logs_2*.zip|tail -1) ""http://localhost:8000/v1/documents?uri=/import/" || xdmp:get-current-user() || "/dump.zip""",
-          "  ^^ Consider adding above command as an alias in your shell rc file! ^^",
-          "",
-          "Please delete after downloading!"
-      )
+      let $manifest := <parts xmlns="xdmp:zip">{
+        for $e in $entries
+        let $date-part := $e/*:date/fn:string()
+        return <part>{
+          $e/*:host/xs:string(.)
+          || '/' || $date-part
+          || '/' || $e/*:filename/xs:string(.)
+        }</part>
+      }</parts>
+      return try {
+        let $contents := xdmp:zip-create(
+          $manifest,
+          $entries ! text { xdmp:filesystem-file(./path/xs:string(.)) }
+        )
+        let $_ := xdmp:document-insert($dlUri, $contents)
+        return (
+            "Export complete!",
+            "",
+            "Click explore and click on document: " || $dlUri || " to download.",
+            "",
+            "To upload locally, 'cd' to your browser 'Downloads' directory and try:",
+            "",
+            "  curl --digest --user admin:admin -X PUT --data-binary " || "@$(ls logs_2*.zip|tail -1) ""http://localhost:8000/v1/documents?uri=/import/" || xdmp:get-current-user() || "/dump.zip""",
+            "  ^^ Consider adding above command as an alias in your shell rc file! ^^",
+            "",
+            "Please delete after downloading!"
+        )
+      } catch ($e) {
+        "Error zipping .. ",
+        $entries,
+        $manifest
+      }
