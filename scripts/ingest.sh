@@ -17,7 +17,7 @@ extract_date() {
   local filename="$1"
   local basename=$(basename "$filename")
   # Extract timestamp from logs_YYYYMMDD_HHMMSS.zip
-  if [[ $basename =~ logs_([0-9]{4})([0-9]{2})([0-9]{2})_([0-9]{2})([0-9]{2})([0-9]{2})\.zip ]]; then
+  if [[ $basename =~ logs_([0-9]{4})([0-9]{2})([0-9]{2})_([0-9]{2})([0-9]{2})([0-9]{2,3})\.zip ]]; then
     echo "${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]} ${BASH_REMATCH[4]}:${BASH_REMATCH[5]}:${BASH_REMATCH[6]}"
   else
     echo "Unknown date"
