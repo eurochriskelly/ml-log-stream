@@ -1,4 +1,6 @@
-const { readFileSync, appendFileSync, writeFileSync } = require("fs");
+const fs = require("fs");
+const readline = require("readline");
+const { once } = require("events");
 
 class LogParser {
   constructor(filename) {
@@ -8,62 +10,83 @@ class LogParser {
     this.host = parts[parts.length - 3];
     this.date = parts[parts.length - 2];
     this.port = parts[parts.length - 1].split("_")[0];
-    this.logLines = readFileSync(filename)
-      .toString()
-      .split("\n")
-      .map((line, index) => ({ line, lineNr: index }));
   }
-  processLog() {
-    this.logData = this.logLines
-      .filter((x) => x.line.trim())
-      .map((x) => {
-        // replace double quotes with single quotes
-        x.line = x.line.replace(/\"/g, "'");
-        return x;
-      })
-      .map(this.logData)
-      .sort((a, b) => (a.date > b.date ? 1 : -1));
-    return this.logData;
+
+  async forEachRecord(onRecord) {
+    const input = fs.createReadStream(this.filename, { encoding: "utf8" });
+    const lines = readline.createInterface({
+      input,
+      crlfDelay: Infinity,
+    });
+
+    let lineNr = 0;
+
+    try {
+      for await (const line of lines) {
+        const record = this.parseLine(line, lineNr);
+        lineNr += 1;
+
+        if (record) {
+          await onRecord(record);
+        }
+      }
+    } finally {
+      lines.close();
+    }
   }
+
+  parseLine(line, lineNr) {
+    if (!line.trim()) {
+      return null;
+    }
+
+    return this.logData({
+      line: line.replace(/"/g, "'"),
+      lineNr,
+    });
+  }
+
   logData = ({ line, lineNr }) => {
     if (this.mode === "error") {
-      // e.g. 2024-02-05 14:50:53.985 Info: DD: undefined FORMAT: json
       return this.record(lineNr, {
         timestamp: line.substring(0, 25).split(" ").slice(0, 2).join("T"),
         level: "Info",
         message: line.split(" ").slice(3).join(" "),
       });
-    } else {
-      // e.g. 10.50.20.72 - User [05/Feb/2024:00:00:00 +0100] 'GET /v1/documents?category=content&uri=%2Fsgd%2Fcontent%2Ffrbr%2Fsgd%2F19891990%2F0000035451%2F1%2Fjpg%2FSGD_19891990_0012219.jpg HTTP/1.1' 200 108 - 'okhttp/4.9.3
-      const regex =
-        /^(\S+) - (\S+) \[(\d{2}\/\w+\/\d{4}:\d{2}:\d{2}:\d{2} \+\d{4})\] '(\w+) (\S+) (HTTP\/\d\.\d)' (\d{3}) (\d+) - '(\S+)'/;
-      const match = line.match(regex);
-      if (match) {
-        const [
-          _,
-          source,
-          user,
-          date,
-          method,
-          url,
-          protocol,
-          statusCode,
-          response,
-        ] = match;
-        return this.record(lineNr, {
-          timestamp: convertDateFormat(date),
-          source,
-          user,
-          method,
-          url,
-          protocol,
-          statusCode,
-          response,
-        });
-      }
+    }
+
+    const regex =
+      /^(\S+) - (\S+) \[(\d{2}\/\w+\/\d{4}:\d{2}:\d{2}:\d{2} \+\d{4})\] '(\w+) (\S+) (HTTP\/\d\.\d)' (\d{3}) (\d+) - '(\S+)'/;
+    const match = line.match(regex);
+
+    if (!match) {
       return this.record(lineNr, {});
     }
+
+    const [
+      _,
+      source,
+      user,
+      date,
+      method,
+      url,
+      protocol,
+      statusCode,
+      response,
+    ] = match;
+
+    return this.record(lineNr, {
+      timestamp: convertDateFormat(date),
+      source,
+      user,
+      method,
+      url,
+      protocol,
+      statusCode,
+      response,
+    });
   };
+
   record(lineNr, f) {
     return {
       id: `${lineNr}-${this.host}-${this.port}-${this.date}`,
@@ -83,18 +106,19 @@ class LogParser {
       message: f.message || "",
     };
   }
-  exportToSql() {
-    let sqlScript = "";
-    this.logData.forEach((item) => {
+
+  async exportToSql() {
+    await this.forEachRecord(async (item) => {
       const values = Object.entries(item)
-        .map(([key, value]) => {
+        .map(([_, value]) => {
           if (typeof value === "string") {
-            // Escape single quotes in SQL string
             return `'${value.replace(/'/g, "''")}'`;
           }
+
           return value;
         })
         .join(", ");
+
       console.log(
         [
           "INSERT OR IGNORE INTO marklogic_logs (",
@@ -106,50 +130,47 @@ class LogParser {
       );
     });
   }
-  exportToJson(fname) {
+
+  async exportToJson(fname) {
+    const output = fs.createWriteStream(fname, { encoding: "utf8" });
+    let count = 0;
+
     try {
-      // Define chunk size
-      const CHUNK_SIZE = 100000;
-      const totalChunks = Math.ceil(this.logData.length / CHUNK_SIZE);
+      await this.forEachRecord(async (item) => {
+        const line = `${JSON.stringify(item)}\n`;
+        count += 1;
 
-      for (let i = 0; i < totalChunks; i++) {
-        const start = i * CHUNK_SIZE;
-        const end = start + CHUNK_SIZE;
-        const chunkData = this.logData.slice(start, end).map((x) => JSON.stringify(x)).join("\n");
-
-        console.log(`Writing chunk ${i + 1} of ${totalChunks}, size: ${chunkData.length} bytes`);
-
-        // Append the chunk to the file
-        if (i === 0) {
-          // For the first chunk, use writeFileSync to create the file
-          writeFileSync(fname, chunkData);
-        } else {
-          // For subsequent chunks, use appendFileSync to add to the file
-          appendFileSync(fname, '\n' + chunkData);
+        if (!output.write(line)) {
+          await once(output, "drain");
         }
-      }
+
+        if (count % 100000 === 0) {
+          console.log(`Processed ${count} log lines`);
+        }
+      });
+
+      output.end();
+      await once(output, "finish");
       console.log(`Written to ${fname}`);
-    } catch (e) {
-      console.error(`Error writing to ${fname}: ${e}`);
+    } catch (error) {
+      output.destroy();
+      console.error(`Error writing to ${fname}: ${error}`);
       process.exit(1);
     }
-  }
-  exportToCsv(fname) {
-    console.log(`Writing to ${fname}`);
-    const data = this.logData.map((x) => JSON.stringify(x)).join("\n");
-    console.log(`The data size is ${data.length} bytes`)
-    writeFileSync(fname, data);
   }
 }
 
 module.exports = { LogParser };
 
 function convertDateFormat(dateStr) {
-  // Parse the date string
   const parts = dateStr.match(
     /(\d{2})\/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\/(\d{4}):(\d{2}):(\d{2}):(\d{2}) (\+\d{4})/,
   );
-  if (!parts) return null;
+
+  if (!parts) {
+    return null;
+  }
+
   const months = {
     Jan: "01",
     Feb: "02",
@@ -164,6 +185,7 @@ function convertDateFormat(dateStr) {
     Nov: "11",
     Dec: "12",
   };
+
   const month = months[parts[2]];
   return `${parts[3]}-${month}-${parts[1]}T${parts[4]}:${parts[5]}:${parts[6]}`;
 }

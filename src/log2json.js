@@ -15,11 +15,16 @@ process.argv.forEach((val, index, lst ) => {
 });
 const logFile = process.argv.pop();
 
-// Use the LogParser class to parse the log file
-const logParser = new LogParser(logFile);
-logParser.processLog(logFile);
-console.log(`Exporting from ${logFile} to ${logFile.replace('.txt.tmp', '.json')}`);
-
 const ext = logType === 'access' ? '.txt' : '.txt.tmp'
-logParser.exportToJson(logFile.replace(ext, '.json'));
+const outputFile = logFile.replace(ext, '.json');
 
+async function main() {
+  const logParser = new LogParser(logFile);
+  console.log(`Exporting from ${logFile} to ${outputFile}`);
+  await logParser.exportToJson(outputFile);
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

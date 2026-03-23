@@ -2,11 +2,12 @@ const { LogParser } = require('./lib/log-parser');
 
 let lastTimestamp = "";
 
-const main = () => {
+const main = async () => {
   const LP = new LogParser(process.argv[2]);
-  LP.processLog();
-  LP.exportToSql();
+  await LP.exportToSql();
 };
 
-main();
-
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
