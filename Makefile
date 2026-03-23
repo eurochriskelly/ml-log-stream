@@ -1,34 +1,31 @@
-# Makefile
+SHELL := /bin/bash
 
-# Define the destination path and the script source
-DEST = /usr/local/bin/mlloga
-SOURCE = scripts/ml-log-analyse.sh
+.DEFAULT_GOAL := help
 
-# Get the full path of the current directory
-REPO_DIR := $(shell pwd)
+.PHONY: help doctor ingest ingest-latest sql clean
 
-# Check for node in PATH
-check_node:
-	@echo "Checking for Node.js..."
-	@command -v node >/dev/null 2>&1 || { echo "Error: Node.js is not installed or not in PATH. Please install Node.js before proceeding."; exit 1; }
-	@echo "Node.js is installed."
+help: ## Show available commands
+	@printf "\nML Log Stream\n\n"
+	@printf "Usage:\n  make <target>\n\n"
+	@printf "Targets:\n"
+	@awk 'BEGIN {FS = ": .*## "}; /^[a-zA-Z0-9_.-]+: .*## / {printf "  %-15s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@printf "\nExamples:\n"
+	@printf "  make doctor\n"
+	@printf "  make ingest\n"
+	@printf "  make ingest-latest\n\n"
 
-# Default target: install
-install: check_node $(SOURCE)
-	@echo "Replacing @@REPO_DIR@@ with the current directory path..."
-	@sed 's|@@REPO_DIR@@|$(REPO_DIR)|g' $(SOURCE) > mlloga
-	@echo "Copying mlloga to $(DEST)..."
-	sudo cp mlloga $(DEST)
-	@echo "Setting executable permissions on $(DEST)..."
-	sudo chmod +x $(DEST)
-	@echo "Cleaning up temporary files..."
-	@rm mlloga
-	@echo "Installation complete: $(DEST)"
+doctor: ## Check system dependencies and local workspace state
+	@bash scripts/doctor.sh
 
-# Clean up any generated files
-clean:
-	@echo "Cleaning up temporary files..."
-	rm -f mlloga
-	@echo "Clean up complete."
+ingest: sql ## Ingest a log export interactively and start the SQL watcher
+	@bash scripts/ingest.sh
 
-.PHONY: install clean check_node
+ingest-latest: sql ## Ingest the most recent log export automatically
+	@bash scripts/ingest.sh --latest
+
+sql: ## Create the sql/ workspace directory if needed
+	@mkdir -p sql
+
+clean: ## Remove generated ingestion artifacts
+	@rm -rf logdir
+	@rm -f marklogic_logs.db monster-log.csv requests-log.csv

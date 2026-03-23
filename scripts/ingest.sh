@@ -24,9 +24,12 @@ extract_date() {
   fi
 }
 
-# Find all log zip files in Downloads
+# Find all log zip files in Downloads (portable for bash 3.2/macOS)
 DOWNLOADS_DIR="$HOME/Downloads"
-mapfile -t LOG_FILES < <(find "$DOWNLOADS_DIR" -maxdepth 1 -name 'logs_*.zip' -type f 2>/dev/null | sort -r)
+LOG_FILES=()
+while IFS= read -r file; do
+  LOG_FILES+=("$file")
+done < <(find "$DOWNLOADS_DIR" -maxdepth 1 -name 'logs_*.zip' -type f 2>/dev/null | sort -r)
 
 if [ ${#LOG_FILES[@]} -eq 0 ]; then
   echo "Error: No log files found in $DOWNLOADS_DIR matching 'logs_*.zip'"
@@ -48,32 +51,29 @@ if [ "$USE_LATEST" = true ]; then
   SELECTED_DATE=$(extract_date "$SELECTED_FILE")
   II "Auto-selected latest log file: $SELECTED_FILE ($SELECTED_DATE)"
 else
-  # Interactive mode - show menu
+  # Interactive mode - build menu options
   echo ""
   echo "Found the following log files in ~/Downloads:"
   echo ""
 
-  for i in "${!LOG_FILES[@]}"; do
-    file="${LOG_FILES[$i]}"
+  # Build array of menu options with dates
+  MENU_OPTIONS=()
+  for file in "${LOG_FILES[@]}"; do
     date_str=$(extract_date "$file")
-    printf "  %2d) %s (%s)\n" $((i + 1)) "$(basename "$file")" "$date_str"
+    MENU_OPTIONS+=("$(basename "$file") ($date_str)")
   done
 
-  echo ""
-  echo "  q) Quit"
-  echo ""
+  # Use select for interactive menu
+  PS3="Select a log file to ingest (or 'q' to quit): "
 
-  # Get user selection
-  while true; do
-    read -p "Select a log file to ingest (1-${#LOG_FILES[@]}): " selection
-
-    if [ "$selection" == "q" ] || [ "$selection" == "Q" ]; then
+  select option in "${MENU_OPTIONS[@]}"; do
+    if [ "$REPLY" == "q" ] || [ "$REPLY" == "Q" ]; then
       echo "Cancelled."
       exit 0
     fi
 
-    if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le ${#LOG_FILES[@]} ]; then
-      SELECTED_FILE="${LOG_FILES[$((selection - 1))]}"
+    if [[ "$REPLY" =~ ^[0-9]+$ ]] && [ "$REPLY" -ge 1 ] && [ "$REPLY" -le ${#LOG_FILES[@]} ]; then
+      SELECTED_FILE="${LOG_FILES[$((REPLY - 1))]}"
       SELECTED_DATE=$(extract_date "$SELECTED_FILE")
       break
     else

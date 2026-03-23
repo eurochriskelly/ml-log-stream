@@ -4,38 +4,61 @@ Stream logs from MarkLogic.
 
 ## Usage
 
-This module is designed to run standalone in the query console or as a
-script evalatated using xdmp,eval or v1/eval endpoint outside MarkLogic.
+The repo now uses `make` directly. No `direnv`, activation script, or shell PATH setup is required.
 
-It follows logs accros all log files in multiple hosts and converts
-the results to a common format.
+Run `make` to see the available commands:
 
-### Online log analysis using query console
+```bash
+make
+```
 
-- Copy the file src/logStreamer.sjs into a query console tab.
-- Select and modify one of the examples at the top of the script
+Typical commands:
 
-### Offline log analysis.
+```bash
+make doctor
+make ingest
+make ingest-latest
+```
 
-Analysing the log files in a running environment can be slow
-and cumbersome, especially if you are repeating the same queries
-over and over again.
+## Commands
 
-- Export the log dump using query console
-  - Copy the src/extract-logs.xqy query console script into a tab
-  - Change any parameters to filter or limit the logs exported
-  - Switch to Documents db and run in dry-run mode
-  - Remove dry-run mode if all looks good and run the export
-  - Download the logfile dump archive
+- `make doctor` checks required and optional dependencies plus local workspace state.
+- `make ingest` lets you pick a `logs_*.zip` file from `~/Downloads`, imports it into SQLite, and starts the SQL watcher.
+- `make ingest-latest` skips the interactive picker and ingests the newest matching zip file.
+- `make sql` creates the local `sql/` directory.
+- `make clean` removes generated ingestion artifacts.
 
-- Import the log dump into a local db for analysis
-  - `npm run ingest`
-  - This will show available log files from ~/Downloads and start the interactive ingestion
-  - To auto-select the latest log file: `npm run ingest -- --latest`
-  - The ingestion pipeline will automatically start the SQL watcher when complete
+## Workflow
 
-- To analyse the logs:
-  - Create `.sql` files in the `./sql` directory
-  - The watcher automatically executes queries when you save changes
-  - Press Ctrl+C to stop the watcher
-  
+1. Run `make doctor`.
+2. Export logs from MarkLogic and download the zip to `~/Downloads`.
+3. Run `make ingest` or `make ingest-latest`.
+4. Create `.sql` files in `./sql/`.
+5. Save SQL files to auto-execute them against `marklogic_logs.db`.
+6. Press `Ctrl+C` to stop the watcher.
+
+## Dependencies
+
+Required:
+
+- `bash`
+- `node`
+- `sqlite3`
+- `unzip`
+
+Optional:
+
+- `fswatch` for SQL file watching
+- `tree` for directory display helpers
+
+## Export Logs From MarkLogic
+
+1. Copy [`qconsole/extract-logs.xqy`](qconsole/extract-logs.xqy) into Query Console.
+2. Configure and run the export.
+3. Download the resulting zip file to `~/Downloads`.
+
+## Query Data
+
+After ingestion, the SQLite database is written to `marklogic_logs.db`.
+
+Create `.sql` files in `./sql/` to run queries. The watcher re-runs the changed file whenever it is saved.
