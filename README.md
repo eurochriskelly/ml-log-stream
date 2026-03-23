@@ -29,12 +29,13 @@ over and over again.
   - Download the logfile dump archive
 
 - Import the log dump into a local db for analysis
-  - `npm run ingest:logs -- path/to/log_2024xxxx.zip`
-  - wait for import to complete (it's currently using sqlite so be patient)
-	
-- To analyse, the logs do as follows:
-  - `mkdir sql` <- create sql files here
-  - `bash analyse-logs.sh ./sql /tmp/log-analysis/marklogic_logs.db`
-  - In a separate terminal modify `.sql` files. 
-    - Every time an sql file is updated, it will refresh the query
+  - `npm run ingest`
+  - This will show available log files from ~/Downloads and start the interactive ingestion
+  - To auto-select the latest log file: `npm run ingest -- --latest`
+  - The ingestion pipeline will automatically start the SQL watcher when complete
+
+- To analyse the logs:
+  - Create `.sql` files in the `./sql` directory
+  - The watcher automatically executes queries when you save changes
+  - Press Ctrl+C to stop the watcher
   
