@@ -4,102 +4,159 @@ const fs = require("fs");
 const path = require("path");
 
 const inputFile = process.env.FILE || "";
+const inputDir = process.env.DIR || "";
 const topN = Number.parseInt(process.env.TOP || "8", 10);
 const customTitle = process.env.TITLE || "";
 let outputFile = process.env.OUTPUT || "";
-
-if (!inputFile) {
-  console.error("Usage: make plot FILE=<load-csv> [TOP=8] [OUTPUT=<html-file>] [TITLE=<chart-title>]");
-  process.exit(1);
-}
-
-if (!fs.existsSync(inputFile)) {
-  console.error(`Input file not found: ${inputFile}`);
-  process.exit(1);
-}
 
 if (!Number.isFinite(topN) || topN < 1) {
   console.error(`TOP must be a positive integer. Received: ${process.env.TOP}`);
   process.exit(1);
 }
 
+const target = resolveTarget(inputFile, inputDir);
+const csvFiles = target.type === "file" ? [target.path] : findCsvFiles(target.path);
+
+if (csvFiles.length === 0) {
+  console.error(`No load CSV files found in ${target.path}`);
+  process.exit(1);
+}
+
+const charts = csvFiles.map((file) => buildChartData(file, topN));
+const pageTitle =
+  customTitle ||
+  (target.type === "dir"
+    ? `Load Dashboard (${path.basename(target.path)})`
+    : charts[0].title);
+
 if (!outputFile) {
-  const parsed = path.parse(inputFile);
-  outputFile = path.join(parsed.dir || ".", `${parsed.name}.html`);
+  outputFile =
+    target.type === "dir"
+      ? path.join(target.path, "dashboard.html")
+      : path.join(path.dirname(target.path), `${path.parse(target.path).name}.html`);
 }
-
-const csvText = fs.readFileSync(inputFile, "utf8").trim();
-if (!csvText) {
-  console.error(`Input file is empty: ${inputFile}`);
-  process.exit(1);
-}
-
-const rows = parseCsv(csvText);
-if (rows.length === 0) {
-  console.error(`No data rows found in ${inputFile}`);
-  process.exit(1);
-}
-
-const bucketSize = rows[0].bucket_size;
-const dimension = rows[0].dimension;
-const title = customTitle || `Requests by ${dimension} (${bucketSize})`;
-
-const bucketOrder = [...new Set(rows.map((row) => row.bucket_start))].sort();
-const totalsBySeries = new Map();
-
-for (const row of rows) {
-  totalsBySeries.set(
-    row.dimension_value,
-    (totalsBySeries.get(row.dimension_value) || 0) + row.request_count,
-  );
-}
-
-const topSeries = [...totalsBySeries.entries()]
-  .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-  .slice(0, topN)
-  .map(([name]) => name);
-
-const topSeriesSet = new Set(topSeries);
-const collapsedName = "__other__";
-const seriesNames = [...topSeries];
-if (totalsBySeries.size > topSeries.length) {
-  seriesNames.push(collapsedName);
-}
-
-const values = new Map();
-for (const bucket of bucketOrder) {
-  values.set(bucket, new Map());
-}
-
-for (const row of rows) {
-  const seriesName = topSeriesSet.has(row.dimension_value) ? row.dimension_value : collapsedName;
-  if (!values.get(row.bucket_start).has(seriesName)) {
-    values.get(row.bucket_start).set(seriesName, 0);
-  }
-  values.get(row.bucket_start).set(
-    seriesName,
-    values.get(row.bucket_start).get(seriesName) + row.request_count,
-  );
-}
-
-const series = seriesNames.map((name) => ({
-  name,
-  values: bucketOrder.map((bucket) => values.get(bucket).get(name) || 0),
-  total: bucketOrder.reduce((sum, bucket) => sum + (values.get(bucket).get(name) || 0), 0),
-}));
-
-const chartData = {
-  title,
-  bucketSize,
-  dimension,
-  buckets: bucketOrder,
-  series,
-};
 
 fs.mkdirSync(path.dirname(outputFile), { recursive: true });
-fs.writeFileSync(outputFile, renderHtml(chartData), "utf8");
+fs.writeFileSync(outputFile, renderHtml(pageTitle, charts, target), "utf8");
 
-console.log(`Wrote chart to ${outputFile}`);
+console.log(`Wrote dashboard to ${outputFile}`);
+
+function resolveTarget(fileArg, dirArg) {
+  if (fileArg) {
+    if (!fs.existsSync(fileArg)) {
+      console.error(`Input path not found: ${fileArg}`);
+      process.exit(1);
+    }
+
+    const stat = fs.statSync(fileArg);
+    return {
+      type: stat.isDirectory() ? "dir" : "file",
+      path: fileArg,
+    };
+  }
+
+  if (dirArg) {
+    if (!fs.existsSync(dirArg) || !fs.statSync(dirArg).isDirectory()) {
+      console.error(`Directory not found: ${dirArg}`);
+      process.exit(1);
+    }
+
+    return { type: "dir", path: dirArg };
+  }
+
+  const loadRoot = path.join(process.cwd(), "load");
+  if (!fs.existsSync(loadRoot)) {
+    console.error("No load directory found. Run 'make load' first or pass DIR=<load-dir>.");
+    process.exit(1);
+  }
+
+  const latestDir = fs
+    .readdirSync(loadRoot)
+    .map((name) => path.join(loadRoot, name))
+    .filter((fullPath) => fs.statSync(fullPath).isDirectory())
+    .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+
+  if (!latestDir) {
+    console.error("No load output directories found. Run 'make load' first or pass DIR=<load-dir>.");
+    process.exit(1);
+  }
+
+  return { type: "dir", path: latestDir };
+}
+
+function findCsvFiles(dirPath) {
+  return fs
+    .readdirSync(dirPath)
+    .filter((name) => name.endsWith(".csv"))
+    .map((name) => path.join(dirPath, name))
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function buildChartData(filePath, seriesLimit) {
+  const csvText = fs.readFileSync(filePath, "utf8").trim();
+  if (!csvText) {
+    throw new Error(`Input file is empty: ${filePath}`);
+  }
+
+  const rows = parseCsv(csvText);
+  if (rows.length === 0) {
+    throw new Error(`No data rows found in ${filePath}`);
+  }
+
+  const bucketOrder = [...new Set(rows.map((row) => row.bucket_start))].sort();
+  const totalsBySeries = new Map();
+
+  for (const row of rows) {
+    totalsBySeries.set(
+      row.dimension_value,
+      (totalsBySeries.get(row.dimension_value) || 0) + row.request_count,
+    );
+  }
+
+  const topSeries = [...totalsBySeries.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, seriesLimit)
+    .map(([name]) => name);
+
+  const topSeriesSet = new Set(topSeries);
+  const collapsedName = "__other__";
+  const seriesNames = [...topSeries];
+  if (totalsBySeries.size > topSeries.length) {
+    seriesNames.push(collapsedName);
+  }
+
+  const values = new Map(bucketOrder.map((bucket) => [bucket, new Map()]));
+  for (const row of rows) {
+    const seriesName = topSeriesSet.has(row.dimension_value) ? row.dimension_value : collapsedName;
+    values.get(row.bucket_start).set(
+      seriesName,
+      (values.get(row.bucket_start).get(seriesName) || 0) + row.request_count,
+    );
+  }
+
+  const series = seriesNames.map((name) => ({
+    name,
+    values: bucketOrder.map((bucket) => values.get(bucket).get(name) || 0),
+    total: bucketOrder.reduce((sum, bucket) => sum + (values.get(bucket).get(name) || 0), 0),
+  }));
+
+  const totalRequests = rows.reduce((sum, row) => sum + row.request_count, 0);
+  const bucketSize = rows[0].bucket_size;
+  const dimension = rows[0].dimension;
+
+  return {
+    id: path.parse(filePath).name,
+    filePath,
+    fileName: path.basename(filePath),
+    title: `Requests by ${dimension} (${bucketSize})`,
+    bucketSize,
+    dimension,
+    buckets: bucketOrder,
+    series,
+    totalRequests,
+    maxValue: Math.max(1, ...series.flatMap((item) => item.values)),
+  };
+}
 
 function parseCsv(text) {
   const lines = text.split(/\r?\n/).filter(Boolean);
@@ -149,57 +206,67 @@ function splitCsvLine(line) {
   return result;
 }
 
-function renderHtml(data) {
-  const payload = JSON.stringify(data);
+function renderHtml(title, charts, target) {
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(data.title)}</title>
+  <title>${escapeHtml(title)}</title>
   <style>
     :root {
-      --bg: #f4f1ea;
-      --panel: #fffdf8;
-      --ink: #1f2937;
+      --bg: #f3ede2;
+      --panel: rgba(255, 252, 246, 0.88);
+      --panel-strong: rgba(255, 252, 246, 0.97);
+      --ink: #17212b;
       --muted: #667085;
-      --grid: #d9d1c4;
-      --accent: #9a3412;
+      --grid: rgba(116, 93, 65, 0.18);
+      --border: rgba(23, 33, 43, 0.08);
+      --shadow: 0 20px 60px rgba(23, 33, 43, 0.1);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: "Iowan Old Style", "Palatino Linotype", serif;
-      background:
-        radial-gradient(circle at top right, rgba(154, 52, 18, 0.12), transparent 28%),
-        linear-gradient(180deg, #f7f2e9 0%, #efe7d8 100%);
       color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(14, 116, 144, 0.12), transparent 28%),
+        radial-gradient(circle at top right, rgba(154, 52, 18, 0.14), transparent 24%),
+        linear-gradient(180deg, #f7f2e7 0%, #ede4d5 100%);
     }
     main {
-      max-width: 1280px;
+      max-width: 1500px;
       margin: 0 auto;
-      padding: 32px 24px 48px;
+      padding: 28px 22px 40px;
     }
     h1 {
-      margin: 0 0 8px;
-      font-size: clamp(2rem, 4vw, 3.25rem);
-      line-height: 1;
-      letter-spacing: -0.03em;
+      margin: 0;
+      font-size: clamp(2.2rem, 5vw, 4rem);
+      line-height: 0.95;
+      letter-spacing: -0.04em;
     }
-    .meta {
+    .lede {
+      margin: 10px 0 24px;
       color: var(--muted);
-      margin-bottom: 24px;
+      font-size: 1rem;
+    }
+    .focus {
+      background: var(--panel-strong);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+      margin-bottom: 22px;
+    }
+    .focus-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 18px;
+      margin: 8px 0 14px;
+      color: var(--muted);
       font-size: 0.95rem;
     }
-    .panel {
-      background: rgba(255, 253, 248, 0.9);
-      border: 1px solid rgba(31, 41, 55, 0.08);
-      border-radius: 20px;
-      padding: 20px;
-      box-shadow: 0 18px 50px rgba(31, 41, 55, 0.08);
-      backdrop-filter: blur(8px);
-    }
-    svg {
+    .focus svg {
       width: 100%;
       height: auto;
       display: block;
@@ -228,16 +295,48 @@ function renderHtml(data) {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .hint {
-      margin-top: 18px;
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: 0 14px 30px rgba(23, 33, 43, 0.06);
+      cursor: pointer;
+      transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+    }
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 18px 38px rgba(23, 33, 43, 0.09);
+    }
+    .card.active {
+      border-color: rgba(14, 116, 144, 0.45);
+      box-shadow: 0 20px 40px rgba(14, 116, 144, 0.14);
+    }
+    .card h2 {
+      margin: 0 0 4px;
+      font-size: 1.05rem;
+      line-height: 1.05;
+    }
+    .card-meta {
       color: var(--muted);
-      font-size: 0.9rem;
+      font-size: 0.86rem;
+      margin-bottom: 8px;
+    }
+    .mini {
+      width: 100%;
+      height: auto;
+      display: block;
     }
     .tooltip {
       position: fixed;
       pointer-events: none;
-      background: rgba(31, 41, 55, 0.94);
-      color: white;
+      background: rgba(23, 33, 43, 0.95);
+      color: #fff;
       padding: 8px 10px;
       border-radius: 10px;
       font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -248,113 +347,185 @@ function renderHtml(data) {
       z-index: 10;
       white-space: nowrap;
     }
+    .hint {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    @media (max-width: 700px) {
+      main { padding: 18px 14px 28px; }
+      .focus { padding: 16px; }
+      .grid { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
   <main>
-    <h1>${escapeHtml(data.title)}</h1>
-    <div class="meta">Bucket size: ${escapeHtml(data.bucketSize)} • Dimension: ${escapeHtml(data.dimension)} • Buckets: ${data.buckets.length}</div>
-    <section class="panel">
-      <svg id="chart" viewBox="0 0 1200 620" role="img" aria-label="${escapeHtml(data.title)}"></svg>
+    <h1>${escapeHtml(title)}</h1>
+    <div class="lede">Source: ${escapeHtml(target.path)}. Click any mini chart to zoom it into the main panel.</div>
+    <section class="focus">
+      <h2 id="focus-title"></h2>
+      <div class="focus-meta" id="focus-meta"></div>
+      <svg id="focus-chart" viewBox="0 0 1200 620" role="img"></svg>
       <div class="legend" id="legend"></div>
-      <div class="hint">Top ${data.series.length}${data.series.some((s) => s.name === "__other__") ? " series including __other__" : " series"} by total request count.</div>
+      <div class="hint">Top series by total request count are shown. Remaining series are collapsed into <code>__other__</code>.</div>
     </section>
+    <section class="grid" id="grid"></section>
   </main>
   <div class="tooltip" id="tooltip"></div>
   <script>
-    const chartData = ${payload};
-
-    const svg = document.getElementById("chart");
-    const legend = document.getElementById("legend");
+    const charts = ${JSON.stringify(charts)};
     const tooltip = document.getElementById("tooltip");
-    const width = 1200;
-    const height = 620;
-    const margin = { top: 24, right: 24, bottom: 88, left: 72 };
-    const innerWidth = width - margin.left - margin.right;
-    const innerHeight = height - margin.top - margin.bottom;
+    const grid = document.getElementById("grid");
+    const focusTitle = document.getElementById("focus-title");
+    const focusMeta = document.getElementById("focus-meta");
+    const focusChart = document.getElementById("focus-chart");
+    const legend = document.getElementById("legend");
     const colors = ["#9a3412", "#0f766e", "#1d4ed8", "#b45309", "#be185d", "#4338ca", "#4d7c0f", "#7c2d12", "#047857"];
-    const maxY = Math.max(1, ...chartData.series.flatMap((series) => series.values));
-    const ySteps = 5;
+    let activeIndex = 0;
 
-    function xFor(index) {
-      if (chartData.buckets.length === 1) return margin.left + innerWidth / 2;
-      return margin.left + (index / (chartData.buckets.length - 1)) * innerWidth;
-    }
-
-    function yFor(value) {
-      return margin.top + innerHeight - (value / maxY) * innerHeight;
-    }
-
-    function linePath(values) {
-      return values.map((value, index) => \`\${index === 0 ? "M" : "L"} \${xFor(index).toFixed(2)} \${yFor(value).toFixed(2)}\`).join(" ");
-    }
-
-    function addSvg(tag, attrs) {
-      const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
-      Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
-      svg.appendChild(node);
-      return node;
-    }
-
-    svg.innerHTML = "";
-    addSvg("rect", { x: 0, y: 0, width, height, fill: "transparent" });
-
-    for (let i = 0; i <= ySteps; i += 1) {
-      const value = (maxY / ySteps) * i;
-      const y = yFor(value);
-      addSvg("line", { x1: margin.left, y1: y, x2: width - margin.right, y2: y, stroke: "#d9d1c4", "stroke-width": "1" });
-      const label = addSvg("text", { x: margin.left - 12, y: y + 4, "text-anchor": "end", fill: "#667085", "font-size": "12" });
-      label.textContent = Math.round(value);
-    }
-
-    addSvg("line", { x1: margin.left, y1: margin.top, x2: margin.left, y2: height - margin.bottom, stroke: "#1f2937", "stroke-width": "1.2" });
-    addSvg("line", { x1: margin.left, y1: height - margin.bottom, x2: width - margin.right, y2: height - margin.bottom, stroke: "#1f2937", "stroke-width": "1.2" });
-
-    chartData.buckets.forEach((bucket, index) => {
-      const x = xFor(index);
-      if (index < chartData.buckets.length - 1) {
-        addSvg("line", { x1: x, y1: margin.top, x2: x, y2: height - margin.bottom, stroke: "rgba(217, 209, 196, 0.45)", "stroke-width": "1" });
-      }
-      const label = addSvg("text", { x, y: height - margin.bottom + 24, "text-anchor": "end", transform: \`rotate(-35 \${x} \${height - margin.bottom + 24})\`, fill: "#667085", "font-size": "12" });
-      label.textContent = bucket;
+    charts.forEach((chart, index) => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "card";
+      card.dataset.index = String(index);
+      card.innerHTML = [
+        "<h2>" + escapeHtml(chart.title) + "</h2>",
+        "<div class=\\"card-meta\\">" + escapeHtml(chart.fileName) + " • total requests: " + chart.totalRequests + "</div>",
+        "<svg class=\\"mini\\" viewBox=\\"0 0 320 150\\" role=\\"img\\"></svg>"
+      ].join("");
+      grid.appendChild(card);
+      renderMini(card.querySelector("svg"), chart);
+      card.addEventListener("click", () => setActive(index));
     });
 
-    chartData.series.forEach((series, seriesIndex) => {
-      const color = colors[seriesIndex % colors.length];
-      addSvg("path", {
-        d: linePath(series.values),
-        fill: "none",
-        stroke: color,
-        "stroke-width": "3",
-        "stroke-linejoin": "round",
-        "stroke-linecap": "round"
-      });
+    setActive(0);
 
-      series.values.forEach((value, index) => {
-        const point = addSvg("circle", {
-          cx: xFor(index),
-          cy: yFor(value),
-          r: 4,
-          fill: color,
-          stroke: "#fffdf8",
-          "stroke-width": "2",
-          "data-bucket": chartData.buckets[index],
-          "data-series": series.name,
-          "data-value": value
+    function setActive(index) {
+      activeIndex = index;
+      Array.from(grid.children).forEach((card, cardIndex) => {
+        card.classList.toggle("active", cardIndex === index);
+      });
+      renderFocus(charts[index]);
+    }
+
+    function renderFocus(chart) {
+      focusTitle.textContent = chart.title;
+      focusMeta.innerHTML = [
+        "file: " + escapeHtml(chart.fileName),
+        "bucket size: " + escapeHtml(chart.bucketSize),
+        "dimension: " + escapeHtml(chart.dimension),
+        "buckets: " + chart.buckets.length,
+        "total requests: " + chart.totalRequests
+      ].map((item) => "<span>" + item + "</span>").join("");
+
+      renderChart(focusChart, chart, true);
+      legend.innerHTML = "";
+
+      chart.series.forEach((series, index) => {
+        const color = colors[index % colors.length];
+        const item = document.createElement("div");
+        item.className = "legend-item";
+        item.innerHTML = "<span class=\\"swatch\\" style=\\"background:" + color + "\\"></span><span class=\\"legend-label\\">" + escapeHtml(series.name) + " (" + series.total + ")</span>";
+        legend.appendChild(item);
+      });
+    }
+
+    function renderMini(svg, chart) {
+      renderChart(svg, chart, false);
+    }
+
+    function renderChart(svg, chart, interactive) {
+      const width = interactive ? 1200 : 320;
+      const height = interactive ? 620 : 150;
+      const margin = interactive
+        ? { top: 24, right: 22, bottom: 88, left: 72 }
+        : { top: 12, right: 10, bottom: 18, left: 12 };
+      const innerWidth = width - margin.left - margin.right;
+      const innerHeight = height - margin.top - margin.bottom;
+      const maxY = Math.max(1, ...chart.series.flatMap((series) => series.values));
+
+      svg.innerHTML = "";
+      svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+
+      const axisColor = interactive ? "#17212b" : "rgba(23, 33, 43, 0.35)";
+      const gridColor = interactive ? "rgba(116, 93, 65, 0.18)" : "rgba(116, 93, 65, 0.14)";
+
+      const xFor = (index) => {
+        if (chart.buckets.length === 1) {
+          return margin.left + innerWidth / 2;
+        }
+        return margin.left + (index / (chart.buckets.length - 1)) * innerWidth;
+      };
+
+      const yFor = (value) => margin.top + innerHeight - (value / maxY) * innerHeight;
+
+      const addSvg = (tag, attrs) => {
+        const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+        Object.entries(attrs).forEach(([key, value]) => node.setAttribute(key, value));
+        svg.appendChild(node);
+        return node;
+      };
+
+      if (interactive) {
+        for (let i = 0; i <= 5; i += 1) {
+          const value = (maxY / 5) * i;
+          const y = yFor(value);
+          addSvg("line", { x1: margin.left, y1: y, x2: width - margin.right, y2: y, stroke: gridColor, "stroke-width": "1" });
+          const label = addSvg("text", { x: margin.left - 12, y: y + 4, "text-anchor": "end", fill: "#667085", "font-size": "12" });
+          label.textContent = Math.round(value);
+        }
+
+        addSvg("line", { x1: margin.left, y1: margin.top, x2: margin.left, y2: height - margin.bottom, stroke: axisColor, "stroke-width": "1.2" });
+        addSvg("line", { x1: margin.left, y1: height - margin.bottom, x2: width - margin.right, y2: height - margin.bottom, stroke: axisColor, "stroke-width": "1.2" });
+
+        chart.buckets.forEach((bucket, index) => {
+          const x = xFor(index);
+          if (index < chart.buckets.length - 1) {
+            addSvg("line", { x1: x, y1: margin.top, x2: x, y2: height - margin.bottom, stroke: "rgba(116, 93, 65, 0.12)", "stroke-width": "1" });
+          }
+          const label = addSvg("text", { x, y: height - margin.bottom + 24, "text-anchor": "end", transform: "rotate(-35 " + x + " " + (height - margin.bottom + 24) + ")", fill: "#667085", "font-size": "12" });
+          label.textContent = bucket;
+        });
+      }
+
+      chart.series.forEach((series, seriesIndex) => {
+        const color = colors[seriesIndex % colors.length];
+        const d = series.values.map((value, index) => (index === 0 ? "M" : "L") + " " + xFor(index).toFixed(2) + " " + yFor(value).toFixed(2)).join(" ");
+        addSvg("path", {
+          d,
+          fill: "none",
+          stroke: color,
+          "stroke-width": interactive ? "3" : "2",
+          "stroke-linejoin": "round",
+          "stroke-linecap": "round",
+          opacity: interactive ? "1" : "0.92"
         });
 
-        point.addEventListener("mouseenter", onEnter);
-        point.addEventListener("mouseleave", onLeave);
-      });
+        if (!interactive) {
+          return;
+        }
 
-      const item = document.createElement("div");
-      item.className = "legend-item";
-      item.innerHTML = \`<span class="swatch" style="background:\${color}"></span><span class="legend-label">\${escapeHtml(series.name)} (\${series.total})</span>\`;
-      legend.appendChild(item);
-    });
+        series.values.forEach((value, index) => {
+          const point = addSvg("circle", {
+            cx: xFor(index),
+            cy: yFor(value),
+            r: 4,
+            fill: color,
+            stroke: "#fffdf8",
+            "stroke-width": "2",
+            "data-bucket": chart.buckets[index],
+            "data-series": series.name,
+            "data-value": value
+          });
+          point.addEventListener("mouseenter", onEnter);
+          point.addEventListener("mouseleave", onLeave);
+        });
+      });
+    }
 
     function onEnter(event) {
-      tooltip.innerHTML = \`\${escapeHtml(event.target.dataset.series)}<br>\${event.target.dataset.bucket}<br>requests: \${event.target.dataset.value}\`;
+      tooltip.innerHTML = escapeHtml(event.target.dataset.series) + "<br>" + escapeHtml(event.target.dataset.bucket) + "<br>requests: " + escapeHtml(event.target.dataset.value);
       tooltip.style.opacity = "1";
       tooltip.style.left = event.clientX + "px";
       tooltip.style.top = event.clientY + "px";

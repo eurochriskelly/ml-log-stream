@@ -20,7 +20,7 @@ make ingest
 make ingest-latest
 make extract START=2026-01-01T12:02:02 END=2026-01-01T12:06:08
 make load START=2026-01-01T12:00:00 END=2026-01-01T13:00:00
-make plot FILE=load/.../load_1m_by_endpoint.csv TOP=8
+make plot
 ```
 
 ## Commands
@@ -30,7 +30,7 @@ make plot FILE=load/.../load_1m_by_endpoint.csv TOP=8
 - `make ingest-latest` skips the interactive picker and ingests the newest matching zip file.
 - `make extract START=... END=...` exports all rows from every table with a `timestamp` column into timestamp-ordered NDJSON.
 - `make load START=... END=...` exports access-log request counts as CSVs across multiple time buckets and grouping dimensions.
-- `make plot FILE=...` renders one load CSV to a standalone HTML chart using Node.js.
+- `make plot` renders a load dashboard HTML page using Node.js.
 - `make sql` creates the local `sql/` directory.
 - `make clean` removes generated ingestion artifacts.
 
@@ -116,29 +116,30 @@ Notes:
 
 ## Plotting
 
-To turn one exported load CSV into an HTML chart:
+To render a dashboard from the most recent load export:
 
 ```bash
-make plot FILE=load/load_2026-01-01T12-00-00_to_2026-01-01T13-00-00/load_1m_by_endpoint.csv TOP=8
+make plot
 ```
 
-This uses Node.js only and does not require Python or extra charting packages. By default it writes the HTML file next to the CSV with the same base name, for example:
+This uses Node.js only and does not require Python or extra charting packages. It creates one HTML page containing:
 
-- `load_1m_by_endpoint.csv`
-- `load_1m_by_endpoint.html`
+- a mini chart for every generated load CSV
+- a larger focus chart at the top
+- click-to-zoom behavior so selecting a mini chart updates the main panel
+
+By default `make plot` finds the newest `load/load_*` directory and writes `dashboard.html` into that directory.
+
+You can also point it at a specific load directory:
+
+```bash
+make plot DIR=load/load_2026-01-01T12-00-00_to_2026-01-01T13-00-00 TOP=8
+```
 
 Options:
 
-- `TOP=8` keeps the busiest 8 series by total request count.
+- `TOP=8` keeps the busiest 8 series by total request count in each chart.
 - Remaining series are collapsed into `__other__`.
 - Override the output path with `OUTPUT=...`.
-- Override the chart title with `TITLE=...`.
-
-Example:
-
-```bash
-make plot \
-  FILE=load/load_2026-01-01T12-00-00_to_2026-01-01T13-00-00/load_1m_by_port.csv \
-  TOP=4 \
-  TITLE="Requests Per Minute by Port"
-```
+- Override the page title with `TITLE=...`.
+- `FILE=...` still works if you want a single-chart page from one CSV.
