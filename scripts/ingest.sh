@@ -97,6 +97,7 @@ unzip -q "$SELECTED_FILE" -d logdir/
 
 # Step 2: Convert to JSON
 II "Step 2/4: Converting logs to JSON..."
+export LIB_DIR="$PROJECT_DIR"
 bash "$SCRIPT_DIR/jsonify-logs.sh" logdir
 
 # Step 3: Combine logs into CSV
