@@ -526,6 +526,7 @@ function renderHtml(title, charts, target) {
 
       const axisColor = interactive ? "#17212b" : "rgba(23, 33, 43, 0.35)";
       const gridColor = interactive ? "rgba(116, 93, 65, 0.18)" : "rgba(116, 93, 65, 0.14)";
+      const axisLabels = interactive ? buildAxisLabels(chart.buckets) : [];
 
       const xFor = (index) => {
         if (chart.buckets.length === 1) {
@@ -555,13 +556,13 @@ function renderHtml(title, charts, target) {
         addSvg("line", { x1: margin.left, y1: margin.top, x2: margin.left, y2: height - margin.bottom, stroke: axisColor, "stroke-width": "1.2" });
         addSvg("line", { x1: margin.left, y1: height - margin.bottom, x2: width - margin.right, y2: height - margin.bottom, stroke: axisColor, "stroke-width": "1.2" });
 
-        chart.buckets.forEach((bucket, index) => {
+        axisLabels.forEach(({ index, label }) => {
           const x = xFor(index);
           if (index < chart.buckets.length - 1) {
             addSvg("line", { x1: x, y1: margin.top, x2: x, y2: height - margin.bottom, stroke: "rgba(116, 93, 65, 0.12)", "stroke-width": "1" });
           }
-          const label = addSvg("text", { x, y: height - margin.bottom + 24, "text-anchor": "end", transform: "rotate(-35 " + x + " " + (height - margin.bottom + 24) + ")", fill: "#667085", "font-size": "12" });
-          label.textContent = bucket;
+          const textNode = addSvg("text", { x, y: height - margin.bottom + 24, "text-anchor": "end", transform: "rotate(-35 " + x + " " + (height - margin.bottom + 24) + ")", fill: "#667085", "font-size": "12" });
+          textNode.textContent = label;
         });
       }
 
@@ -601,7 +602,7 @@ function renderHtml(title, charts, target) {
     }
 
     function onEnter(event) {
-      tooltip.innerHTML = escapeHtml(event.target.dataset.series) + "<br>" + escapeHtml(event.target.dataset.bucket) + "<br>requests: " + escapeHtml(event.target.dataset.value);
+      tooltip.innerHTML = escapeHtml(event.target.dataset.series) + "<br>" + escapeHtml(formatTooltipTime(event.target.dataset.bucket)) + "<br>requests: " + escapeHtml(event.target.dataset.value);
       tooltip.style.opacity = "1";
       tooltip.style.left = event.clientX + "px";
       tooltip.style.top = event.clientY + "px";
@@ -609,6 +610,90 @@ function renderHtml(title, charts, target) {
 
     function onLeave() {
       tooltip.style.opacity = "0";
+    }
+
+    function buildAxisLabels(buckets) {
+      const intervalMinutes = chooseLabelIntervalMinutes(buckets);
+      const labels = [];
+
+      buckets.forEach((bucket, index) => {
+        const parts = parseBucket(bucket);
+        if (!parts) {
+          return;
+        }
+
+        if (parts.second !== 0) {
+          return;
+        }
+
+        const minuteOfDay = parts.hour * 60 + parts.minute;
+        if (minuteOfDay % intervalMinutes !== 0) {
+          return;
+        }
+
+        labels.push({
+          index,
+          label: pad(parts.hour) + ":" + pad(parts.minute),
+        });
+      });
+
+      if (labels.length === 0 && buckets.length > 0) {
+        const first = parseBucket(buckets[0]);
+        if (first) {
+          labels.push({
+            index: 0,
+            label: pad(first.hour) + ":" + pad(first.minute - (first.minute % 5)),
+          });
+        }
+      }
+
+      return labels;
+    }
+
+    function chooseLabelIntervalMinutes(buckets) {
+      const allowed = [5, 10, 15, 20, 30, 60, 120, 180, 240, 360, 720, 1440];
+      const parsed = buckets.map(parseBucket).filter(Boolean);
+
+      if (parsed.length < 2) {
+        return 5;
+      }
+
+      const firstMinute = parsed[0].hour * 60 + parsed[0].minute;
+      const lastMinute = parsed[parsed.length - 1].hour * 60 + parsed[parsed.length - 1].minute;
+      const spanMinutes = Math.max(5, lastMinute - firstMinute);
+
+      for (const interval of allowed) {
+        if (Math.floor(spanMinutes / interval) + 1 <= 20) {
+          return interval;
+        }
+      }
+
+      return 1440;
+    }
+
+    function parseBucket(bucket) {
+      const match = String(bucket).match(/(\d{2}):(\d{2}):(\d{2})$/);
+      if (!match) {
+        return null;
+      }
+
+      return {
+        hour: Number(match[1]),
+        minute: Number(match[2]),
+        second: Number(match[3]),
+      };
+    }
+
+    function formatTooltipTime(bucket) {
+      const parts = parseBucket(bucket);
+      if (!parts) {
+        return bucket;
+      }
+      return pad(parts.hour) + ":" + pad(parts.minute);
+    }
+
+    function pad(value) {
+      return String(value).padStart(2, "0");
     }
 
     function escapeHtml(value) {
