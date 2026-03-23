@@ -22,7 +22,9 @@ if (csvFiles.length === 0) {
   process.exit(1);
 }
 
-const charts = csvFiles.map((file) => buildChartData(file, topN));
+const charts = csvFiles
+  .map((file) => buildChartData(file, topN))
+  .sort((a, b) => bucketRank(a.bucketSize) - bucketRank(b.bucketSize) || dimensionRank(a.dimension) - dimensionRank(b.dimension));
 const pageTitle =
   customTitle ||
   (target.type === "dir"
@@ -206,6 +208,26 @@ function splitCsvLine(line) {
   return result;
 }
 
+function bucketRank(bucketSize) {
+  return {
+    "1h": 0,
+    "15m": 1,
+    "5m": 2,
+    "1m": 3,
+    "15s": 4,
+    "5s": 5,
+  }[bucketSize] ?? 999;
+}
+
+function dimensionRank(dimension) {
+  return {
+    port: 0,
+    endpoint: 1,
+    user: 2,
+    ip: 3,
+  }[dimension] ?? 999;
+}
+
 function renderHtml(title, charts, target) {
   return `<!doctype html>
 <html lang="en">
@@ -295,9 +317,36 @@ function renderHtml(title, charts, target) {
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .grid {
+    .rows {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 18px;
+    }
+    .row {
+      background: rgba(255, 252, 246, 0.55);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 14px;
+      box-shadow: 0 12px 28px rgba(23, 33, 43, 0.05);
+    }
+    .row-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .row-title {
+      margin: 0;
+      font-size: 1.05rem;
+      letter-spacing: 0.01em;
+    }
+    .row-meta {
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+    .row-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 14px;
     }
     .card {
@@ -355,7 +404,10 @@ function renderHtml(title, charts, target) {
     @media (max-width: 700px) {
       main { padding: 18px 14px 28px; }
       .focus { padding: 16px; }
-      .grid { grid-template-columns: 1fr; }
+      .row-grid { grid-template-columns: 1fr; }
+    }
+    @media (min-width: 701px) and (max-width: 1100px) {
+      .row-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
   </style>
 </head>
@@ -370,13 +422,13 @@ function renderHtml(title, charts, target) {
       <div class="legend" id="legend"></div>
       <div class="hint">Top series by total request count are shown. Remaining series are collapsed into <code>__other__</code>.</div>
     </section>
-    <section class="grid" id="grid"></section>
+    <section class="rows" id="rows"></section>
   </main>
   <div class="tooltip" id="tooltip"></div>
   <script>
     const charts = ${JSON.stringify(charts)};
     const tooltip = document.getElementById("tooltip");
-    const grid = document.getElementById("grid");
+    const rowsRoot = document.getElementById("rows");
     const focusTitle = document.getElementById("focus-title");
     const focusMeta = document.getElementById("focus-meta");
     const focusChart = document.getElementById("focus-chart");
@@ -384,27 +436,51 @@ function renderHtml(title, charts, target) {
     const colors = ["#9a3412", "#0f766e", "#1d4ed8", "#b45309", "#be185d", "#4338ca", "#4d7c0f", "#7c2d12", "#047857"];
     let activeIndex = 0;
 
-    charts.forEach((chart, index) => {
-      const card = document.createElement("button");
-      card.type = "button";
-      card.className = "card";
-      card.dataset.index = String(index);
-      card.innerHTML = [
-        "<h2>" + escapeHtml(chart.title) + "</h2>",
-        "<div class=\\"card-meta\\">" + escapeHtml(chart.fileName) + " • total requests: " + chart.totalRequests + "</div>",
-        "<svg class=\\"mini\\" viewBox=\\"0 0 320 150\\" role=\\"img\\"></svg>"
+    const groupedCharts = charts.reduce((acc, chart, index) => {
+      const key = chart.bucketSize;
+      if (!acc[key]) {
+        acc[key] = [];
+      }
+      acc[key].push({ chart, index });
+      return acc;
+    }, {});
+
+    Object.entries(groupedCharts).forEach(([bucketSize, items]) => {
+      const row = document.createElement("section");
+      row.className = "row";
+      row.innerHTML = [
+        "<div class=\\"row-header\\">",
+        "<h2 class=\\"row-title\\">" + escapeHtml(bucketSize) + " buckets</h2>",
+        "<div class=\\"row-meta\\">" + items.length + " charts</div>",
+        "</div>",
+        "<div class=\\"row-grid\\"></div>"
       ].join("");
-      grid.appendChild(card);
-      renderMini(card.querySelector("svg"), chart);
-      card.addEventListener("click", () => setActive(index));
+      const rowGrid = row.querySelector(".row-grid");
+
+      items.forEach(({ chart, index }) => {
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "card";
+        card.dataset.index = String(index);
+        card.innerHTML = [
+          "<h2>" + escapeHtml(chart.title) + "</h2>",
+          "<div class=\\"card-meta\\">" + escapeHtml(chart.fileName) + " • total requests: " + chart.totalRequests + "</div>",
+          "<svg class=\\"mini\\" viewBox=\\"0 0 320 150\\" role=\\"img\\"></svg>"
+        ].join("");
+        rowGrid.appendChild(card);
+        renderMini(card.querySelector("svg"), chart);
+        card.addEventListener("click", () => setActive(index));
+      });
+
+      rowsRoot.appendChild(row);
     });
 
     setActive(0);
 
     function setActive(index) {
       activeIndex = index;
-      Array.from(grid.children).forEach((card, cardIndex) => {
-        card.classList.toggle("active", cardIndex === index);
+      document.querySelectorAll(".card").forEach((card) => {
+        card.classList.toggle("active", Number(card.dataset.index) === index);
       });
       renderFocus(charts[index]);
     }
