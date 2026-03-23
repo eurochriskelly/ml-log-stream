@@ -688,6 +688,27 @@ function renderHtml(title, charts, target) {
       tooltip.style.opacity = "0";
     }
 
+    function parseBucket(bucket) {
+      const match = String(bucket).match(/(\\d{2}):(\\d{2}):(\\d{2})$/);
+      if (!match) {
+        return null;
+      }
+
+      return {
+        hour: Number(match[1]),
+        minute: Number(match[2]),
+      };
+    }
+
+    function formatBucketTime(bucket) {
+      const parts = parseBucket(bucket);
+      if (!parts) {
+        return bucket;
+      }
+
+      return String(parts.hour).padStart(2, "0") + ":" + String(parts.minute).padStart(2, "0");
+    }
+
     function escapeHtml(value) {
       return String(value)
         .replace(/&/g, "&amp;")
