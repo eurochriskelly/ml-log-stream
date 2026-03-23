@@ -2,7 +2,7 @@ SHELL := /bin/bash
 
 .DEFAULT_GOAL := help
 
-.PHONY: help doctor ingest ingest-latest extract sql clean
+.PHONY: help doctor ingest ingest-latest extract load plot sql clean
 
 help: ## Show available commands
 	@printf "\nML Log Stream\n\n"
@@ -14,6 +14,8 @@ help: ## Show available commands
 	@printf "  make ingest\n"
 	@printf "  make ingest-latest\n\n"
 	@printf "  make extract START=2026-01-01T12:02:02 END=2026-01-01T12:06:08\n\n"
+	@printf "  make load START=2026-01-01T12:00:00 END=2026-01-01T13:00:00\n\n"
+	@printf "  make plot FILE=load/.../load_1m_by_endpoint.csv TOP=8\n\n"
 
 doctor: ## Check system dependencies and local workspace state
 	@bash scripts/doctor.sh
@@ -26,6 +28,12 @@ ingest-latest: sql ## Ingest the most recent log export automatically
 
 extract: ## Export ordered JSON rows from all timestamped tables between START and END
 	@START="$(START)" END="$(END)" OUTPUT="$(OUTPUT)" DB="$(DB)" bash scripts/extract.sh
+
+load: ## Export request-count CSVs by time bucket and access-log dimension
+	@START="$(START)" END="$(END)" OUTDIR="$(OUTDIR)" DB="$(DB)" bash scripts/load.sh
+
+plot: ## Render a load CSV to a local HTML chart using Node.js
+	@FILE="$(FILE)" OUTPUT="$(OUTPUT)" TOP="$(TOP)" TITLE="$(TITLE)" node scripts/plot-load.js
 
 sql: ## Create the sql/ workspace directory if needed
 	@mkdir -p sql
