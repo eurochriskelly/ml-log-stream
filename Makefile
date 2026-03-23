@@ -2,7 +2,7 @@ SHELL := /bin/bash
 
 .DEFAULT_GOAL := help
 
-.PHONY: help doctor ingest ingest-latest sql clean
+.PHONY: help doctor ingest ingest-latest extract sql clean
 
 help: ## Show available commands
 	@printf "\nML Log Stream\n\n"
@@ -13,6 +13,7 @@ help: ## Show available commands
 	@printf "  make doctor\n"
 	@printf "  make ingest\n"
 	@printf "  make ingest-latest\n\n"
+	@printf "  make extract START=2026-01-01T12:02:02 END=2026-01-01T12:06:08\n\n"
 
 doctor: ## Check system dependencies and local workspace state
 	@bash scripts/doctor.sh
@@ -22,6 +23,9 @@ ingest: sql ## Ingest a log export interactively and start the SQL watcher
 
 ingest-latest: sql ## Ingest the most recent log export automatically
 	@bash scripts/ingest.sh --latest
+
+extract: ## Export ordered JSON rows from all timestamped tables between START and END
+	@START="$(START)" END="$(END)" OUTPUT="$(OUTPUT)" DB="$(DB)" bash scripts/extract.sh
 
 sql: ## Create the sql/ workspace directory if needed
 	@mkdir -p sql

@@ -18,6 +18,7 @@ Typical commands:
 make doctor
 make ingest
 make ingest-latest
+make extract START=2026-01-01T12:02:02 END=2026-01-01T12:06:08
 ```
 
 ## Commands
@@ -25,6 +26,7 @@ make ingest-latest
 - `make doctor` checks required and optional dependencies plus local workspace state.
 - `make ingest` lets you pick a `logs_*.zip` file from `~/Downloads`, imports it into SQLite, and starts the SQL watcher.
 - `make ingest-latest` skips the interactive picker and ingests the newest matching zip file.
+- `make extract START=... END=...` exports all rows from every table with a `timestamp` column into timestamp-ordered NDJSON.
 - `make sql` creates the local `sql/` directory.
 - `make clean` removes generated ingestion artifacts.
 
@@ -62,3 +64,15 @@ Optional:
 After ingestion, the SQLite database is written to `marklogic_logs.db`.
 
 Create `.sql` files in `./sql/` to run queries. The watcher re-runs the changed file whenever it is saved.
+
+To extract a time window across all timestamped tables:
+
+```bash
+make extract START=2026-01-01T12:02:02 END=2026-01-01T12:06:08
+```
+
+By default this writes a JSON-lines file under `./extracts/`. You can override that with `OUTPUT=...`, for example:
+
+```bash
+make extract START=2026-01-01T12:02:02 END=2026-01-01T12:06:08 OUTPUT=tmp/window.jsonl
+```
