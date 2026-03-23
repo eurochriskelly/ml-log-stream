@@ -29,6 +29,8 @@ sql_escape() {
 
 START_SQL="$(sql_escape "$START_TS")"
 END_SQL="$(sql_escape "$END_TS")"
+START_EXPR="datetime(replace(substr('${START_SQL}', 1, 19), 'T', ' '))"
+END_EXPR="datetime(replace(substr('${END_SQL}', 1, 19), 'T', ' '))"
 
 if [ -z "$OUTPUT_FILE" ]; then
   mkdir -p extracts
@@ -61,7 +63,8 @@ while IFS= read -r table_name; do
     row_json_args="${row_json_args}'${column_name}', \"${column_name}\""
   done < <(sqlite3 "$DB_FILE" "SELECT name FROM pragma_table_info('$table_name') ORDER BY cid;")
 
-  table_query="SELECT timestamp AS sort_timestamp, json_object('table', '${table_name}', 'timestamp', timestamp, 'row', json_object(${row_json_args})) AS json_row FROM \"${table_name}\" WHERE timestamp >= '${START_SQL}' AND timestamp <= '${END_SQL}'"
+  normalized_timestamp="datetime(replace(substr(timestamp, 1, 19), 'T', ' '))"
+  table_query="SELECT ${normalized_timestamp} AS sort_timestamp, json_object('table', '${table_name}', 'timestamp', timestamp, 'row', json_object(${row_json_args})) AS json_row FROM \"${table_name}\" WHERE ${normalized_timestamp} IS NOT NULL AND ${normalized_timestamp} >= ${START_EXPR} AND ${normalized_timestamp} <= ${END_EXPR}"
 
   if [ -n "$UNION_QUERY" ]; then
     UNION_QUERY="${UNION_QUERY} UNION ALL ${table_query}"
@@ -83,3 +86,20 @@ sqlite3 -noheader "$DB_FILE" "$FINAL_QUERY" > "$OUTPUT_FILE"
 
 ROW_COUNT="$(wc -l < "$OUTPUT_FILE" | tr -d ' ')"
 echo "Wrote ${ROW_COUNT} rows to ${OUTPUT_FILE}"
+
+if [ "$ROW_COUNT" -eq 0 ]; then
+  echo ""
+  echo "No rows matched after timestamp normalization."
+  echo "Timestamp ranges for scanned tables:"
+
+  while IFS= read -r table_name; do
+    [ -n "$table_name" ] || continue
+
+    has_timestamp_column="$(sqlite3 "$DB_FILE" "SELECT COUNT(*) FROM pragma_table_info('$table_name') WHERE name = 'timestamp';")"
+    if [ "$has_timestamp_column" -eq 0 ]; then
+      continue
+    fi
+
+    sqlite3 -header -column "$DB_FILE" "SELECT '${table_name}' AS table_name, MIN(timestamp) AS min_timestamp, MAX(timestamp) AS max_timestamp, COUNT(*) AS rows FROM \"${table_name}\";"
+  done < <(sqlite3 "$DB_FILE" "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name;")
+fi
