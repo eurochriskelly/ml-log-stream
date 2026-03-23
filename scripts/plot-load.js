@@ -154,6 +154,7 @@ function buildChartData(filePath, seriesLimit) {
     bucketSize,
     dimension,
     buckets: bucketOrder,
+    axisLabels: computeAxisLabels(bucketOrder),
     series,
     totalRequests,
     maxValue: Math.max(1, ...series.flatMap((item) => item.values)),
@@ -206,6 +207,81 @@ function splitCsvLine(line) {
 
   result.push(current);
   return result;
+}
+
+function computeAxisLabels(buckets) {
+  const parsed = buckets
+    .map((bucket, index) => ({ index, bucket, parts: parseBucket(bucket) }))
+    .filter((item) => item.parts);
+
+  if (parsed.length === 0) {
+    return [];
+  }
+
+  const intervalMinutes = chooseLabelIntervalMinutes(parsed);
+  const labels = parsed
+    .filter((item) => item.parts.second === 0)
+    .filter((item) => ((item.parts.hour * 60 + item.parts.minute) % intervalMinutes) === 0)
+    .map((item) => ({
+      index: item.index,
+      label: `${pad(item.parts.hour)}:${pad(item.parts.minute)}`,
+    }));
+
+  if (labels.length > 0) {
+    return labels;
+  }
+
+  const first = parsed[0].parts;
+  return [{
+    index: parsed[0].index,
+    label: `${pad(first.hour)}:${pad(first.minute - (first.minute % 5))}`,
+  }];
+}
+
+function chooseLabelIntervalMinutes(parsedBuckets) {
+  const allowed = [5, 10, 15, 20, 30, 60, 120, 180, 240, 360, 720, 1440];
+
+  if (parsedBuckets.length < 2) {
+    return 5;
+  }
+
+  const firstMinute = parsedBuckets[0].parts.hour * 60 + parsedBuckets[0].parts.minute;
+  const lastMinute = parsedBuckets[parsedBuckets.length - 1].parts.hour * 60 + parsedBuckets[parsedBuckets.length - 1].parts.minute;
+  const spanMinutes = Math.max(5, lastMinute - firstMinute);
+
+  for (const interval of allowed) {
+    if (Math.floor(spanMinutes / interval) + 1 <= 20) {
+      return interval;
+    }
+  }
+
+  return 1440;
+}
+
+function parseBucket(bucket) {
+  const match = String(bucket).match(/(\d{2}):(\d{2}):(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    hour: Number(match[1]),
+    minute: Number(match[2]),
+    second: Number(match[3]),
+  };
+}
+
+function formatBucketTime(bucket) {
+  const parts = parseBucket(bucket);
+  if (!parts) {
+    return bucket;
+  }
+
+  return `${pad(parts.hour)}:${pad(parts.minute)}`;
+}
+
+function pad(value) {
+  return String(value).padStart(2, "0");
 }
 
 function bucketRank(bucketSize) {
@@ -526,7 +602,7 @@ function renderHtml(title, charts, target) {
 
       const axisColor = interactive ? "#17212b" : "rgba(23, 33, 43, 0.35)";
       const gridColor = interactive ? "rgba(116, 93, 65, 0.18)" : "rgba(116, 93, 65, 0.14)";
-      const axisLabels = interactive ? buildAxisLabels(chart.buckets) : [];
+      const axisLabels = interactive ? chart.axisLabels : [];
 
       const xFor = (index) => {
         if (chart.buckets.length === 1) {
@@ -602,7 +678,7 @@ function renderHtml(title, charts, target) {
     }
 
     function onEnter(event) {
-      tooltip.innerHTML = escapeHtml(event.target.dataset.series) + "<br>" + escapeHtml(formatTooltipTime(event.target.dataset.bucket)) + "<br>requests: " + escapeHtml(event.target.dataset.value);
+      tooltip.innerHTML = escapeHtml(event.target.dataset.series) + "<br>" + escapeHtml(formatBucketTime(event.target.dataset.bucket)) + "<br>requests: " + escapeHtml(event.target.dataset.value);
       tooltip.style.opacity = "1";
       tooltip.style.left = event.clientX + "px";
       tooltip.style.top = event.clientY + "px";
@@ -610,90 +686,6 @@ function renderHtml(title, charts, target) {
 
     function onLeave() {
       tooltip.style.opacity = "0";
-    }
-
-    function buildAxisLabels(buckets) {
-      const intervalMinutes = chooseLabelIntervalMinutes(buckets);
-      const labels = [];
-
-      buckets.forEach((bucket, index) => {
-        const parts = parseBucket(bucket);
-        if (!parts) {
-          return;
-        }
-
-        if (parts.second !== 0) {
-          return;
-        }
-
-        const minuteOfDay = parts.hour * 60 + parts.minute;
-        if (minuteOfDay % intervalMinutes !== 0) {
-          return;
-        }
-
-        labels.push({
-          index,
-          label: pad(parts.hour) + ":" + pad(parts.minute),
-        });
-      });
-
-      if (labels.length === 0 && buckets.length > 0) {
-        const first = parseBucket(buckets[0]);
-        if (first) {
-          labels.push({
-            index: 0,
-            label: pad(first.hour) + ":" + pad(first.minute - (first.minute % 5)),
-          });
-        }
-      }
-
-      return labels;
-    }
-
-    function chooseLabelIntervalMinutes(buckets) {
-      const allowed = [5, 10, 15, 20, 30, 60, 120, 180, 240, 360, 720, 1440];
-      const parsed = buckets.map(parseBucket).filter(Boolean);
-
-      if (parsed.length < 2) {
-        return 5;
-      }
-
-      const firstMinute = parsed[0].hour * 60 + parsed[0].minute;
-      const lastMinute = parsed[parsed.length - 1].hour * 60 + parsed[parsed.length - 1].minute;
-      const spanMinutes = Math.max(5, lastMinute - firstMinute);
-
-      for (const interval of allowed) {
-        if (Math.floor(spanMinutes / interval) + 1 <= 20) {
-          return interval;
-        }
-      }
-
-      return 1440;
-    }
-
-    function parseBucket(bucket) {
-      const match = String(bucket).match(/(\d{2}):(\d{2}):(\d{2})$/);
-      if (!match) {
-        return null;
-      }
-
-      return {
-        hour: Number(match[1]),
-        minute: Number(match[2]),
-        second: Number(match[3]),
-      };
-    }
-
-    function formatTooltipTime(bucket) {
-      const parts = parseBucket(bucket);
-      if (!parts) {
-        return bucket;
-      }
-      return pad(parts.hour) + ":" + pad(parts.minute);
-    }
-
-    function pad(value) {
-      return String(value).padStart(2, "0");
     }
 
     function escapeHtml(value) {
