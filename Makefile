@@ -36,8 +36,8 @@ load: ## Export request-count CSVs by time bucket and access-log dimension
 plot: ## Render a load dashboard to a local HTML page using Node.js
 	@FILE="$(FILE)" DIR="$(DIR)" OUTPUT="$(OUTPUT)" TOP="$(TOP)" TITLE="$(TITLE)" node scripts/plot-load.js
 
-view: ## Pretty-print JSONL extract with colors (FILE=extracts/foo.jsonl or first arg)
-	@bash scripts/pretty-view.sh "$(or $(FILE),$(filter-out $@,$(MAKECMDGOALS)))" "$(TABLES)"
+view: ## Pretty-print JSONL extract with colors (FILE=extracts/foo.jsonl or first arg, ALL=1 for everything, LIMIT=N for first N)
+	@bash scripts/pretty-view.sh "$(or $(FILE),$(filter-out $@,$(MAKECMDGOALS)))" "$(ALL)" "$(LIMIT)"
 
 # Catch-all to handle extra arguments passed to make view
 %:
