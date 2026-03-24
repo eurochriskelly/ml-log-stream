@@ -4,76 +4,55 @@ const fs = require('fs');
 const readline = require('readline');
 const chalk = require('chalk');
 
-// Color schemes for different table types
 const colors = {
-  logs: {
-    timestamp: chalk.gray,
-    host: chalk.yellow,
-    type: chalk.magenta,
-    statusCode: (code) => {
-      if (code >= 200 && code < 300) return chalk.green(code);
-      if (code >= 300 && code < 400) return chalk.yellow(code);
-      if (code >= 400 && code < 500) return chalk.red(code);
-      return chalk.red.bold(code);
-    },
-    method: chalk.blue,
-    url: chalk.white,
-    user: chalk.cyan,
-    message: chalk.white
+  timestamp: chalk.gray,
+  host: chalk.yellow,
+  type: chalk.magenta,
+  statusCode: (code) => {
+    if (code >= 200 && code < 300) return chalk.green(code);
+    if (code >= 300 && code < 400) return chalk.yellow(code);
+    if (code >= 400 && code < 500) return chalk.red(code);
+    return chalk.red.bold(code);
   },
-  requests: {
-    timestamp: chalk.gray,
-    pathPart1: chalk.yellow,
-    pathPart2: chalk.yellow,
-    user: chalk.cyan,
-    elapsedTime: (time) => {
-      if (time < 100) return chalk.green(time.toFixed(2));
-      if (time < 500) return chalk.yellow(time.toFixed(2));
-      return chalk.red(time.toFixed(2));
-    }
+  method: chalk.blue,
+  url: chalk.white,
+  user: chalk.cyan,
+  message: chalk.white,
+  path: chalk.yellow,
+  elapsed: (time) => {
+    const t = parseFloat(time) || 0;
+    if (t < 100) return chalk.green(t.toFixed(2));
+    if (t < 500) return chalk.yellow(t.toFixed(2));
+    return chalk.red(t.toFixed(2));
   }
 };
 
-function pad(str, len) {
-  str = String(str || '');
-  return str.length > len ? str.substring(0, len - 1) + '…' : str.padEnd(len);
-}
-
-function formatLogsRow({ timestamp, row }) {
-  const status = row.statusCode || '';
-  const url = (row.url || '').substring(0, 60);
-  const msg = (row.message || '').substring(0, 40);
+function formatAccessRow(row) {
+  const ts = colors.timestamp(row.timestamp || '');
+  const method = colors.method((row.method || '----').padEnd(6));
+  const status = row.statusCode ? colors.statusCode(String(row.statusCode).padEnd(5)) : chalk.gray('---- '.padEnd(5));
+  const host = colors.host((row.host || 'unknown').padEnd(15));
+  const user = colors.user((row.user || '----').padEnd(15));
+  const url = colors.url(row.url || '');
   
-  return `${colors.logs.timestamp(pad(timestamp, 24))} ${chalk.cyan('[LOG]')} ${colors.logs.host(pad(row.host, 15))} ${colors.logs.type(pad(row.type, 8))} ${status ? colors.logs.statusCode(pad(status, 6)) : pad('', 6)} ${colors.logs.method(pad(row.method, 7))} ${colors.logs.url(pad(url, 60))} ${colors.logs.user(pad(row.user, 15))} ${colors.logs.message(msg)}`;
+  return `${chalk.cyan('[ACCESS] ')} ${ts} ${method} ${status} ${host} ${user} ${url}`;
 }
 
-function formatRequestsRow({ timestamp, row }) {
-  const path = `${row.pathPart1 || ''}/${row.pathPart2 || ''}`.substring(0, 50);
+function formatErrorRow(row) {
+  const ts = colors.timestamp(row.timestamp || '');
+  const message = colors.message(row.message || '');
+  
+  return `${chalk.red('[ERROR]  ')} ${ts} ${message}`;
+}
+
+function formatRequestRow(row) {
+  const ts = colors.timestamp(row.timestamp || '');
   const elapsed = parseFloat(row.elapsedTime) || 0;
+  const elapsedStr = colors.elapsed(elapsed).padStart(10);
+  const user = colors.user((row.user || 'anonymous').padEnd(15));
+  const path = colors.path(`${row.pathPart1 || ''}/${row.pathPart2 || ''}`);
   
-  return `${colors.requests.timestamp(pad(timestamp, 24))} ${chalk.green('[REQ]')} ${colors.requests.pathPart1(pad(path, 50))} ${colors.requests.user(pad(row.user, 15))} ${colors.requests.elapsedTime(pad(elapsed.toFixed(2) + 'ms', 10))}`;
-}
-
-function printLogsHeader() {
-  console.log(chalk.bold.cyan(pad('Timestamp', 24)) + ' ' + 
-    pad('', 5) + ' ' +
-    chalk.bold.cyan(pad('Host', 15)) + ' ' +
-    chalk.bold.cyan(pad('Type', 8)) + ' ' +
-    chalk.bold.cyan(pad('Status', 6)) + ' ' +
-    chalk.bold.cyan(pad('Method', 7)) + ' ' +
-    chalk.bold.cyan(pad('URL', 60)) + ' ' +
-    chalk.bold.cyan(pad('User', 15)) + ' ' +
-    chalk.bold.cyan('Message'));
-  console.log('─'.repeat(200));
-}
-
-function printRequestsHeader() {
-  console.log(chalk.bold.green(pad('Timestamp', 24)) + ' ' + 
-    pad('', 5) + ' ' +
-    chalk.bold.green(pad('Path', 50)) + ' ' +
-    chalk.bold.green(pad('User', 15)) + ' ' +
-    chalk.bold.green('Elapsed'));
-  console.log('─'.repeat(100));
+  return `${chalk.green('[REQUEST]')} ${ts} ${elapsedStr} ${user} ${path}`;
 }
 
 function showProgress(count) {
@@ -86,10 +65,10 @@ async function main() {
   const args = process.argv.slice(2);
   const showAll = args.includes('--all');
   
-  let limit = 200;
+  let limit = 500;
   const limitIdx = args.findIndex(arg => arg === '--limit' || arg === '-n');
   if (limitIdx !== -1 && args[limitIdx + 1]) {
-    limit = parseInt(args[limitIdx + 1], 10) || 200;
+    limit = parseInt(args[limitIdx + 1], 10) || 500;
   }
   
   const inputFile = args.find(arg => !arg.startsWith('--') && !arg.startsWith('-') && !/^\d+$/.test(arg));
@@ -101,8 +80,8 @@ async function main() {
   if (!inputFile && process.stdin.isTTY) {
     console.log(chalk.yellow('Usage: cat file.jsonl | node scripts/pretty-view.js'));
     console.log(chalk.yellow('   or: node scripts/pretty-view.js file.jsonl'));
-    console.log(chalk.yellow('   or: node scripts/pretty-view.js --all file.jsonl     (show all rows)'));
-    console.log(chalk.yellow('   or: node scripts/pretty-view.js --limit 500 file.jsonl (show first 500)'));
+    console.log(chalk.yellow('   or: node scripts/pretty-view.js --all file.jsonl'));
+    console.log(chalk.yellow('   or: node scripts/pretty-view.js --limit 1000 file.jsonl'));
     process.exit(1);
   }
 
@@ -139,29 +118,23 @@ async function main() {
 
   const displayRows = showAll ? rows : rows.slice(0, limit);
   const totalRows = rows.length;
+
+  console.log(chalk.bold('\n📊 Log Stream (chronological view)\n'));
   
-  // Separate by table type
-  const logs = displayRows.filter(r => r.table === 'logs');
-  const requests = displayRows.filter(r => r.table === 'requests');
-
-  if (logs.length > 0) {
-    const totalLogs = rows.filter(r => r.table === 'logs').length;
-    const suffix = !showAll && totalLogs > logs.length ? ` (showing ${logs.length})` : '';
-    console.log(chalk.bold(`\n📋 Access/Error Logs (${totalLogs.toLocaleString()} rows${suffix})\n`));
-    printLogsHeader();
-    logs.forEach(row => console.log(formatLogsRow(row)));
-  }
-
-  if (requests.length > 0) {
-    const totalRequests = rows.filter(r => r.table === 'requests').length;
-    const suffix = !showAll && totalRequests > requests.length ? ` (showing ${requests.length})` : '';
-    console.log(chalk.bold(`\n📈 Request Logs (${totalRequests.toLocaleString()} rows${suffix})\n`));
-    printRequestsHeader();
-    requests.forEach(row => console.log(formatRequestsRow(row)));
-  }
+  displayRows.forEach(({ table, row }) => {
+    if (table === 'logs') {
+      if (row.type === 'error') {
+        console.log(formatErrorRow(row));
+      } else {
+        console.log(formatAccessRow(row));
+      }
+    } else if (table === 'requests') {
+      console.log(formatRequestRow(row));
+    }
+  });
     
   if (!showAll && totalRows > limit) {
-    console.log(chalk.yellow(`\n⚠️  Showing ${limit} of ${totalRows.toLocaleString()} rows. Use --all to see everything, or increase --limit.`));
+    console.log(chalk.yellow(`\n⚠️  Showing ${limit} of ${totalRows.toLocaleString()} rows. Use --all to see everything.`));
   }
 
   console.log(chalk.gray(`\nTotal: ${totalRows.toLocaleString()} rows\n`));
