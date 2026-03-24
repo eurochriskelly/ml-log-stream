@@ -2,6 +2,7 @@
 #
 # Wrapper script for pretty-view.js
 # Usage: make view FILE=extracts/foo.jsonl [ALL=1] [LIMIT=500]
+#    or: make view extracts/foo.jsonl [ALL=1] [LIMIT=500]
 #
 
 set -e
@@ -17,8 +18,14 @@ LIMIT="${3:-}"
 
 if [ -z "$FILE" ]; then
   echo "Usage: make view FILE=extracts/foo.jsonl"
-  echo "   or: make view FILE=extracts/foo.jsonl ALL=1     (show all rows - WARNING: slow)"
-  echo "   or: make view FILE=extracts/foo.jsonl LIMIT=500  (show first 500)"
+  echo "   or: make view extracts/foo.jsonl"
+  echo ""
+  echo "Options:"
+  echo "   ALL=1       Show all rows (may be slow)"
+  echo "   LIMIT=500   Show first N rows (default: 500)"
+  echo ""
+  echo "Pipe to less (preserves colors):"
+  echo "   make view FILE=extracts/foo.jsonl ALL=1 | less -R"
   exit 1
 fi
 
@@ -31,4 +38,5 @@ ARGS=""
 [ -n "$ALL" ] && ARGS="$ARGS --all"
 [ -n "$LIMIT" ] && ARGS="$ARGS --limit $LIMIT"
 
+# Execute with proper handling of arguments
 node scripts/pretty-view.js $ARGS "$FILE"

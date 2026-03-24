@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// Force colors even when piping to less
+process.env.FORCE_COLOR = '1';
+
 const fs = require('fs');
 const readline = require('readline');
 const chalk = require('chalk');
@@ -55,34 +58,55 @@ function formatRequestRow(row) {
   return `${chalk.green('[REQUEST]')} ${ts} ${elapsedStr} ${user} ${path}`;
 }
 
-function showProgress(count) {
+function showProgress(count, showAll) {
   if (count % 1000 === 0) {
-    process.stderr.write(`\r${chalk.gray(`Reading... ${count.toLocaleString()} rows`)}`);
+    const msg = showAll 
+      ? `Please wait... reading ${count.toLocaleString()} rows`
+      : `Reading... ${count.toLocaleString()} rows`;
+    process.stderr.write(`\r${chalk.gray(msg)}`);
   }
 }
 
 async function main() {
   const args = process.argv.slice(2);
-  const showAll = args.includes('--all');
   
+  // Parse arguments more robustly
+  let showAll = false;
   let limit = 500;
-  const limitIdx = args.findIndex(arg => arg === '--limit' || arg === '-n');
-  if (limitIdx !== -1 && args[limitIdx + 1]) {
-    limit = parseInt(args[limitIdx + 1], 10) || 500;
-  }
+  let inputFile = null;
   
-  const inputFile = args.find(arg => !arg.startsWith('--') && !arg.startsWith('-') && !/^\d+$/.test(arg));
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--all' || arg === '-a') {
+      showAll = true;
+    } else if (arg === '--limit' || arg === '-n') {
+      if (args[i + 1]) {
+        limit = parseInt(args[i + 1], 10) || 500;
+        i++; // Skip the next arg since we consumed it
+      }
+    } else if (!arg.startsWith('-') && !inputFile) {
+      inputFile = arg;
+    }
+  }
   
   const inputStream = inputFile 
     ? fs.createReadStream(inputFile)
     : process.stdin;
 
   if (!inputFile && process.stdin.isTTY) {
-    console.log(chalk.yellow('Usage: cat file.jsonl | node scripts/pretty-view.js'));
-    console.log(chalk.yellow('   or: node scripts/pretty-view.js file.jsonl'));
-    console.log(chalk.yellow('   or: node scripts/pretty-view.js --all file.jsonl'));
-    console.log(chalk.yellow('   or: node scripts/pretty-view.js --limit 1000 file.jsonl'));
+    console.log(chalk.yellow('Usage:'));
+    console.log(chalk.yellow('  cat file.jsonl | node scripts/pretty-view.js'));
+    console.log(chalk.yellow('  node scripts/pretty-view.js file.jsonl'));
+    console.log(chalk.yellow('  node scripts/pretty-view.js --all file.jsonl'));
+    console.log(chalk.yellow('  node scripts/pretty-view.js --limit 1000 file.jsonl'));
+    console.log(chalk.yellow(''));
+    console.log(chalk.yellow('With less (preserves colors):'));
+    console.log(chalk.yellow('  node scripts/pretty-view.js --all file.jsonl | less -R'));
     process.exit(1);
+  }
+
+  if (showAll) {
+    console.error(chalk.blue('ℹ️  Reading all rows... this may take a while'));
   }
 
   const rl = readline.createInterface({
@@ -100,16 +124,14 @@ async function main() {
       if (data.table && data.row) {
         rows.push(data);
         count++;
-        if (!showAll && count <= limit) {
-          showProgress(count);
-        }
+        showProgress(count, showAll);
       }
     } catch (e) {
       // Skip invalid lines
     }
   }
 
-  process.stderr.write('\r' + ' '.repeat(50) + '\r');
+  process.stderr.write('\r' + ' '.repeat(60) + '\r');
 
   if (rows.length === 0) {
     console.log(chalk.yellow('No valid JSONL rows found'));
