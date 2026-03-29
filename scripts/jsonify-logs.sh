@@ -18,8 +18,7 @@ processLogFiles() {
   local type=$1
   LOG_FILES=$(find "${DIR}" -type f -name "*${type}Log*txt")
   # Loop over every file and pass it to a node program
-  for file in $LOG_FILES
-  do
+  for file in $LOG_FILES; do
     # If the name includes "Error", pass the flag --type error
     if [[ $file == *"Error"* ]]; then
       II "Processing ErrorLog $file"

@@ -13,22 +13,16 @@ if [ ! -f "$CSV_FILE_1" ]; then
   exit 1
 fi
 
-# Remove the database if it exists to start fresh
-if [ -f "$DB_NAME" ]; then
-  rm "$DB_NAME"
-fi
-
-# Create SQLite database, define table, and import CSV file
+# Create SQLite database and tables if they don't exist
 sqlite3 "$DB_NAME" <<EOF
-.mode csv
-CREATE TABLE $TABLE_NAME_1 (
+CREATE TABLE IF NOT EXISTS $TABLE_NAME_1 (
   timestamp TEXT,
   date TEXT,
   host TEXT,
   port INTEGER,
   type TEXT,
   lineNr INTEGER,
-  id INTEGER,
+  id TEXT PRIMARY KEY,
   source TEXT,
   user TEXT,
   method TEXT,
@@ -36,26 +30,44 @@ CREATE TABLE $TABLE_NAME_1 (
   protocol TEXT,
   statusCode INTEGER,
   response TEXT,
-  message TEXT
+  message TEXT,
+  source_zip TEXT,
+  export_date TEXT
 );
 
-CREATE VIEW v_logs AS
+CREATE VIEW IF NOT EXISTS v_logs AS
 SELECT *, 
        'sed -n ' || lineNr || 'p logdir/' || host || '/' || date || '/' || port || '_' || 
        UPPER(SUBSTR(type, 1, 1)) || LOWER(SUBSTR(type, 2)) || 'Log.txt' AS find 
 FROM $TABLE_NAME_1;
+EOF
 
+# Import CSV data using DELETE + INSERT approach
+sqlite3 "$DB_NAME" <<EOF
+.mode csv
 .separator "|"
-.import $CSV_FILE_1 $TABLE_NAME_1
+CREATE TEMP TABLE temp_logs AS SELECT * FROM $TABLE_NAME_1 WHERE 1=0;
+.import $CSV_FILE_1 temp_logs
+
+-- Delete existing records that have older export_date
+DELETE FROM $TABLE_NAME_1 WHERE id IN (
+  SELECT t.id FROM $TABLE_NAME_1 l
+  JOIN temp_logs t ON l.id = t.id
+  WHERE t.export_date > l.export_date
+   OR (t.export_date = l.export_date AND t.source_zip > l.source_zip)
+);
+
+-- Insert all records (new ones insert, existing ones were deleted above if newer)
+INSERT OR IGNORE INTO $TABLE_NAME_1 SELECT * FROM temp_logs;
+
+DROP TABLE temp_logs;
 EOF
 
 echo "Data imported successfully from $CSV_FILE_1 into $DB_NAME ($TABLE_NAME_1)."
 
-# Create SQLite database, define table, and import CSV file
-#
+# Create requests table if it doesn't exist
 sqlite3 "$DB_NAME" <<EOF
-.mode csv
-CREATE TABLE $TABLE_NAME_2 (
+CREATE TABLE IF NOT EXISTS $TABLE_NAME_2 (
   timestamp TEXT,
   url TEXT,
   pathPart1 TEXT,
@@ -93,43 +105,52 @@ CREATE TABLE $TABLE_NAME_2 (
   valueCacheHits INTEGER,
   valueCacheMisses INTEGER,
   regexpCacheHits INTEGER,
-  regexpCacheMisses INTEGER
+  regexpCacheMisses INTEGER,
+  source_zip TEXT,
+  export_date TEXT,
+  PRIMARY KEY(timestamp, url, user, elapsedTime)
 );
 
-CREATE VIEW grouped_requests AS
+CREATE VIEW IF NOT EXISTS grouped_requests AS
 SELECT 
     pathPart1,
     pathPart2,
     COUNT(*) AS query_count,
     AVG(elapsedTime) AS avg_elapsed_time,
     COUNT(*) * AVG(elapsedTime) as cost
-FROM 
-  $TABLE_NAME_2
-GROUP BY 
-    pathPart1, pathPart2;
+FROM $TABLE_NAME_2
+GROUP BY pathPart1, pathPart2;
 
-CREATE VIEW v1_search_users AS
+CREATE VIEW IF NOT EXISTS v1_search_users AS
 SELECT 
     user,
     COUNT(*) AS search_count,
     AVG(elapsedTime) AS avg_elapsed_time
-FROM 
-  $TABLE_NAME_2
-WHERE 
-    pathPart1 = 'v1' AND pathPart2 = 'search'
-GROUP BY 
-    user;
+FROM $TABLE_NAME_2
+WHERE pathPart1 = 'v1' AND pathPart2 = 'search'
+GROUP BY user;
+EOF
 
-
+# Import requests CSV data using DELETE + INSERT approach
+sqlite3 "$DB_NAME" <<EOF
+.mode csv
 .separator "|"
-.import $CSV_FILE_2 $TABLE_NAME_2
+CREATE TEMP TABLE temp_requests AS SELECT * FROM $TABLE_NAME_2 WHERE 1=0;
+.import $CSV_FILE_2 temp_requests
+
+-- Delete existing records that have older export_date
+DELETE FROM $TABLE_NAME_2 WHERE (timestamp, url, user, elapsedTime) IN (
+  SELECT t.timestamp, t.url, t.user, t.elapsedTime 
+  FROM $TABLE_NAME_2 l
+  JOIN temp_requests t ON l.timestamp = t.timestamp AND l.url = t.url AND l.user = t.user AND l.elapsedTime = t.elapsedTime
+  WHERE t.export_date > l.export_date
+   OR (t.export_date = l.export_date AND t.source_zip > l.source_zip)
+);
+
+-- Insert all records (new ones insert, existing ones were deleted above if newer)
+INSERT OR IGNORE INTO $TABLE_NAME_2 SELECT * FROM temp_requests;
+
+DROP TABLE temp_requests;
 EOF
 
 echo "Data imported successfully from $CSV_FILE_2 into $DB_NAME ($TABLE_NAME_2)."
-
-
-
-
-
-
-

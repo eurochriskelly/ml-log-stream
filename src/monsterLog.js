@@ -10,7 +10,7 @@ const fs = require('fs');
 const DELIMITER = '|';
 
 // Command-line arguments handling
-let logFilePath, outputFilePath, logType;
+let logFilePath, outputFilePath, logType, sourceZip, exportDate;
 argv = process.argv;
 argv.forEach((arg, index, lst) => {
   if (arg === '--log-file') {
@@ -21,6 +21,12 @@ argv.forEach((arg, index, lst) => {
   }
   if (arg === '--output') {
     outputFilePath = lst[index + 1];
+  }
+  if (arg === '--source-zip') {
+    sourceZip = lst[index + 1];
+  }
+  if (arg === '--export-date') {
+    exportDate = lst[index + 1];
   }
 });
 
@@ -73,6 +79,8 @@ function jsonToCsvLine(logEntry, type) {
       logEntry.valueCacheMisses,
       logEntry.regexpCacheHits,
       logEntry.regexpCacheMisses,
+      sourceZip || '',
+      exportDate || ''
     ].join(DELIMITER)
   } else {
     return [
@@ -81,7 +89,7 @@ function jsonToCsvLine(logEntry, type) {
       logEntry.host,
       logEntry.port,
       logEntry.type,
-      logEntry.lineNr, // Use lineNr from JSON
+      logEntry.lineNr,
       logEntry.id,
       logEntry.source,
       logEntry.user,
@@ -90,7 +98,9 @@ function jsonToCsvLine(logEntry, type) {
       logEntry.protocol,
       logEntry.statusCode,
       logEntry.response,
-      JSON.stringify(logEntry.message.replace(/\|/g, '/')) // Handle cases where the message is an object
+      JSON.stringify(logEntry.message.replace(/\|/g, '/')),
+      sourceZip || '',
+      exportDate || ''
     ].join(DELIMITER);
   }
 }
