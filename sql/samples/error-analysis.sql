@@ -6,22 +6,22 @@
 
 -- Count errors by type
 SELECT 
-    level,
+    type,
     COUNT(*) as error_count
 FROM logs
-WHERE level IN ('ERROR', 'CRITICAL', 'SEVERE')
-GROUP BY level
+WHERE type IN ('ERROR', 'CRITICAL', 'SEVERE')
+GROUP BY type
 ORDER BY error_count DESC;
 
 -- Get recent errors with context
 SELECT 
     timestamp,
-    level,
+    type,
     message,
-    app_server,
+    source,
     host
 FROM logs
-WHERE level IN ('ERROR', 'CRITICAL', 'SEVERE')
+WHERE type IN ('ERROR', 'CRITICAL', 'SEVERE')
 ORDER BY timestamp DESC
 LIMIT 20;
 
@@ -32,7 +32,7 @@ SELECT
     MIN(timestamp) as first_seen,
     MAX(timestamp) as last_seen
 FROM logs
-WHERE level = 'ERROR'
+WHERE type = 'ERROR'
 GROUP BY message
 HAVING occurrence_count > 1
 ORDER BY occurrence_count DESC

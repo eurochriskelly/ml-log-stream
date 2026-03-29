@@ -4,39 +4,35 @@
 -- Use case: Understanding traffic patterns and popular endpoints
 -- =====================================================
 
--- Most frequently accessed URIs
+-- Most frequently accessed endpoints (by path parts)
 SELECT 
-    uri,
+    pathPart1 || '/' || pathPart2 as endpoint,
     COUNT(*) as request_count,
-    AVG(response_time_ms) as avg_response_time
-FROM logs
-WHERE uri IS NOT NULL
-GROUP BY uri
+    ROUND(AVG(elapsedTime), 2) as avg_elapsed_time
+FROM requests
+WHERE pathPart1 IS NOT NULL
+GROUP BY pathPart1, pathPart2
 ORDER BY request_count DESC
 LIMIT 15;
 
--- HTTP methods distribution
+-- Top level paths distribution
 SELECT 
-    http_method,
+    pathPart1,
     COUNT(*) as request_count,
     ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 2) as percentage
-FROM logs
-WHERE http_method IS NOT NULL
-GROUP BY http_method
+FROM requests
+WHERE pathPart1 IS NOT NULL
+GROUP BY pathPart1
 ORDER BY request_count DESC;
 
--- Status code analysis
+-- Slowest endpoints
 SELECT 
-    status_code,
+    pathPart1 || '/' || pathPart2 as endpoint,
     COUNT(*) as request_count,
-    CASE 
-        WHEN status_code BETWEEN 200 AND 299 THEN 'Success'
-        WHEN status_code BETWEEN 300 AND 399 THEN 'Redirect'
-        WHEN status_code BETWEEN 400 AND 499 THEN 'Client Error'
-        WHEN status_code BETWEEN 500 AND 599 THEN 'Server Error'
-        ELSE 'Other'
-    END as category
-FROM logs
-WHERE status_code IS NOT NULL
-GROUP BY status_code
-ORDER BY status_code;
+    ROUND(AVG(elapsedTime), 2) as avg_elapsed_time,
+    ROUND(MAX(elapsedTime), 2) as max_elapsed_time
+FROM requests
+WHERE pathPart1 IS NOT NULL
+GROUP BY pathPart1, pathPart2
+ORDER BY avg_elapsed_time DESC
+LIMIT 15;

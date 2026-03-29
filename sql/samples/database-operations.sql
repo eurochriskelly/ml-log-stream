@@ -26,23 +26,22 @@ WHERE message LIKE '%insert%'
 GROUP BY operation_type
 ORDER BY operation_count DESC;
 
--- Slow database operations
+-- Database operations with errors
 SELECT 
     timestamp,
-    app_server,
-    message,
-    response_time_ms
+    source,
+    message
 FROM logs
 WHERE (message LIKE '%query%' OR message LIKE '%index%')
-  AND response_time_ms > 1000
-ORDER BY response_time_ms DESC
+  AND type = 'ERROR'
+ORDER BY timestamp DESC
 LIMIT 15;
 
 -- Forest and database events
 SELECT 
     timestamp,
-    level,
-    app_server,
+    type,
+    source,
     message
 FROM logs
 WHERE message LIKE '%forest%'

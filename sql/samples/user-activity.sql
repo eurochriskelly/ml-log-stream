@@ -8,7 +8,7 @@
 SELECT 
     user,
     COUNT(*) as request_count,
-    COUNT(DISTINCT app_server) as servers_accessed,
+    COUNT(DISTINCT source) as servers_accessed,
     MIN(timestamp) as first_activity,
     MAX(timestamp) as last_activity
 FROM logs
@@ -21,7 +21,7 @@ LIMIT 15;
 SELECT 
     timestamp,
     user,
-    app_server,
+    source,
     message
 FROM logs
 WHERE message LIKE '%login%' 
